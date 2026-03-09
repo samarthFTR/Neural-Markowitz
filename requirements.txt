@@ -1,0 +1,11 @@
+numpy
+pandas
+yfinance
+torch
+tensorflow
+scikit-learn
+cvxpy
+PyPortfolioOpt
+Matplotlib
+Seaborn
+streamlit
