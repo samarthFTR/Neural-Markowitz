@@ -26,7 +26,8 @@ class DataTransformation:
                 "AAPL_MA7","AMZN_MA7","GOOGL_MA7","MSFT_MA7","NVDA_MA7",
                 "AAPL_MA30","AMZN_MA30","GOOGL_MA30","MSFT_MA30","NVDA_MA30",
                 "AAPL_VOL","AMZN_VOL","GOOGL_VOL","MSFT_VOL","NVDA_VOL",
-                "AAPL_MOM","AMZN_MOM","GOOGL_MOM","MSFT_MOM","NVDA_MOM"
+                "AAPL_MOM20","AMZN_MOM20","GOOGL_MOM20","MSFT_MOM20","NVDA_MOM20",
+                "AAPL_LAG1","AMZN_LAG1","GOOGL_LAG1","MSFT_LAG1","NVDA_LAG1",
                 ]
             num_pipeline = Pipeline(
                 steps=[
@@ -59,7 +60,8 @@ class DataTransformation:
                 "AAPL_MA7","AMZN_MA7","GOOGL_MA7","MSFT_MA7","NVDA_MA7",
                 "AAPL_MA30","AMZN_MA30","GOOGL_MA30","MSFT_MA30","NVDA_MA30",
                 "AAPL_VOL","AMZN_VOL","GOOGL_VOL","MSFT_VOL","NVDA_VOL",
-                "AAPL_MOM","AMZN_MOM","GOOGL_MOM","MSFT_MOM","NVDA_MOM"
+                "AAPL_MOM20","AMZN_MOM20","GOOGL_MOM20","MSFT_MOM20","NVDA_MOM20",
+                "AAPL_LAG1","AMZN_LAG1","GOOGL_LAG1","MSFT_LAG1","NVDA_LAG1",
                 ]
 
             input_feature_train_df = train_df.drop(columns=target_columns,axis=1)

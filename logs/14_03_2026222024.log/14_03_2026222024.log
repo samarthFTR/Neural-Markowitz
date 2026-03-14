@@ -1,0 +1,26 @@
+[2026-03-14 22:20:25,184] 22 root - INFO - Entered the data ingestion method or component
+[2026-03-14 22:20:26,363] 28 root - INFO - Saved the raw data to csv file
+[2026-03-14 22:20:26,417] 54 root - INFO - Saved the processed data to csv file
+[2026-03-14 22:20:26,462] 60 root - INFO - Ingestion of the data is completed
+[2026-03-14 22:20:26,504] 53 root - INFO - Reading test and train data completed
+[2026-03-14 22:20:26,504] 54 root - INFO - Obtaining Preprocessing Object
+[2026-03-14 22:20:26,504] 43 root - INFO - Numerical columns: ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7', 'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30', 'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30', 'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL', 'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL', 'AAPL_MOM20', 'AMZN_MOM20', 'GOOGL_MOM20', 'MSFT_MOM20', 'NVDA_MOM20', 'AAPL_LAG1', 'AMZN_LAG1', 'GOOGL_LAG1', 'MSFT_LAG1', 'NVDA_LAG1']
+[2026-03-14 22:20:26,508] 44 root - INFO - Preprocessor: ColumnTransformer(transformers=[('num_pipeline',
+                                 Pipeline(steps=[('imputer',
+                                                  SimpleImputer(strategy='median')),
+                                                 ('scaler', StandardScaler())]),
+                                 ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7',
+                                  'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30',
+                                  'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30',
+                                  'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL',
+                                  'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL',
+                                  'AAPL_MOM20', 'AMZN_MOM20', 'GOOGL_MOM20',
+                                  'MSFT_MOM20', 'NVDA_MOM20', 'AAPL_LAG1',
+                                  'AMZN_LAG1', 'GOOGL_LAG1', 'MSFT_LAG1',
+                                  'NVDA_LAG1'])])
+[2026-03-14 22:20:26,509] 70 root - INFO - Applying preprocessor object on training and test dataframe
+[2026-03-14 22:20:26,516] 81 root - INFO - Saving preprocessing object
+[2026-03-14 22:20:26,517] 26 root - INFO - Splitting training and test input data
+[2026-03-14 22:20:49,058] 86 root - INFO - RandomForest training completed
+[2026-03-14 22:21:10,266] 86 root - INFO - XGBoost training completed
+[2026-03-14 22:21:10,266] 54 root - INFO - Best found mode on dataset XGBoost

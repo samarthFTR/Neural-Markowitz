@@ -3,9 +3,12 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import r2_score
 from sklearn.model_selection import GridSearchCV
 from dataclasses import dataclass
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.multioutput import MultiOutputRegressor
+from scipy.stats import spearmanr
 
 import sys
 from utils.exception import CustomException
@@ -30,67 +33,63 @@ class ModelTraining:
                 )
             models = {
                 "RandomForest": RandomForestRegressor(),
-                "XGBoost": XGBRegressor()
+                "XGBoost": MultiOutputRegressor(XGBRegressor())
             }
             params = {
                 "RandomForest": {
-                    "n_estimators": [8,16,32,64,128,256],
-                    "max_depth": [None, 5, 10, 20, 30],
-                    "min_samples_split": [2, 5, 10],
-                    "min_samples_leaf": [1, 2, 4],
-                    "max_features": ["sqrt", "log2", None],
-                    "bootstrap": [True, False]
+                    "n_estimators":[100,200],
+                    "max_depth":[10,20]
                 },
                 "XGBoost":{
-                    "n_estimators": [100, 200, 500],
-                    "max_depth": [3, 5, 7, 10],
-                    "learning_rate": [0.01, 0.05, 0.1],
-                    "subsample": [0.7, 0.8, 1],
-                    "colsample_bytree": [0.7, 0.8, 1],
-                    "gamma": [0, 0.1, 0.3],
-                    "min_child_weight": [1, 3, 5]           
+                    "estimator__n_estimators":[100,200],
+                    "estimator__max_depth":[3,5],
+                    "estimator__learning_rate":[0.01,0.1],
+                    "estimator__subsample": [0.7,0.9],
+                    "estimator__colsample_bytree": [0.7,0.9]
                 }
             }
-            model_report:dict= ModelTraining.evaluate_models(X_train=X_train,y_train=y_train,X_test=X_test,y_test=y_test,models=models,params=params)
+            model_report, trained_models= ModelTraining.evaluate_models(X_train=X_train,y_train=y_train,X_test=X_test,y_test=y_test,models=models,params=params)
             best_model_score = max(sorted(model_report.values()))
-            best_model_name = list(model_report.keys())[
-                list(model_report.values()).index(best_model_score)
-            ]
-            if best_model_score<0.75:
-                raise CustomException('No Suitable Model found')
+            best_model_name = list(model_report.keys())[ list(model_report.values()).index(best_model_score) ]
+            best_model = trained_models[best_model_name]
             logging.info(f"Best found mode on dataset {best_model_name}")
-
-            best_model = models[best_model_name]
             print("Test Accuracy",model_report)
             save_object(
-                file_path=self.model_trainer_config.trained_model_file_path,
+                file_path=self.model_training_config.trained_model_file_path,
                 obj=best_model
             )
             y_pred = best_model.predict(X_train)
-            train_score = accuracy_score(y_pred=y_pred,y_true=y_train)
+            train_score = r2_score(y_pred=y_pred,y_true=y_train)
             return train_score
         except Exception as e:
             raise CustomException(e,sys)
     def evaluate_models(X_train,y_train,X_test,y_test,models,params):
+        tscv = TimeSeriesSplit(n_splits=5)
         try:
             report = {}
-            for i in range(len(list(models))):
-                print("Starting Training")
-                model = list(models.values())[i]
-                para = params[list(models.keys())[i]]
+            best_models = {}
 
-                gs = GridSearchCV(model,para,cv=8)
-                gs.fit(X=X_train,y=y_train)
+            for model_name, model in models.items():
 
-                model.set_params(**gs.best_params_)
-                model.fit(X_train,y_train)
+                print(f"Training {model_name}")
 
-                y_pred = model.predict(X_test)
-                model_score = accuracy_score(y_true=y_test,y_pred=y_pred)
+                param = params[model_name]
+                gs = GridSearchCV(model, param,cv=tscv, n_jobs=-1)
+                gs.fit(X_train, y_train)
 
-                report[list(model.keys())[i]]=model_score
-                logging.info("Training of the data is completed")
-                return report
+                best_model = gs.best_estimator_
+                y_pred = best_model.predict(X_test)
+                score = r2_score(y_test, y_pred)
+
+                report[model_name] = score
+                best_models[model_name] = best_model
+
+                corr,_ = spearmanr(y_test.flatten(), y_pred.flatten())
+                print("Spearman Rank Correlation:",corr)
+
+                logging.info(f"{model_name} training completed")
+
+            return report, best_models
 
         except Exception as e:
             raise CustomException(e,sys)

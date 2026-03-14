@@ -1,0 +1,27 @@
+[2026-03-14 22:04:24,380] 22 root - INFO - Entered the data ingestion method or component
+[2026-03-14 22:04:25,278] 28 root - INFO - Saved the raw data to csv file
+[2026-03-14 22:04:25,372] 66 root - INFO - Saved the processed data to csv file
+[2026-03-14 22:04:25,455] 72 root - INFO - Ingestion of the data is completed
+[2026-03-14 22:04:25,494] 58 root - INFO - Reading test and train data completed
+[2026-03-14 22:04:25,494] 59 root - INFO - Obtaining Preprocessing Object
+[2026-03-14 22:04:25,494] 48 root - INFO - Numerical columns: ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7', 'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30', 'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30', 'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL', 'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL', 'AAPL_MOM5', 'AMZN_MOM5', 'GOOGL_MOM5', 'MSFT_MOM5', 'NVDA_MOM5', 'AAPL_MOM20', 'AMZN_MOM20', 'GOOGL_MOM20', 'MSFT_MOM20', 'NVDA_MOM20', 'AAPL_LAG1', 'AMZN_LAG1', 'GOOGL_LAG1', 'MSFT_LAG1', 'NVDA_LAG1', 'AAPL_LAG3', 'AMZN_LAG3', 'GOOGL_LAG3', 'MSFT_LAG3', 'NVDA_LAG3', 'AAPL_LAG5', 'AMZN_LAG5', 'GOOGL_LAG5', 'MSFT_LAG5', 'NVDA_LAG5', 'AAPL_MEANREV', 'AMZN_MEANREV', 'GOOGL_MEANREV', 'MSFT_MEANREV', 'NVDA_MEANREV', 'AAPL_VOLSHOCK', 'AMZN_VOLSHOCK', 'GOOGL_VOLSHOCK', 'MSFT_VOLSHOCK', 'NVDA_VOLSHOCK']
+[2026-03-14 22:04:25,497] 49 root - INFO - Preprocessor: ColumnTransformer(transformers=[('num_pipeline',
+                                 Pipeline(steps=[('imputer',
+                                                  SimpleImputer(strategy='median')),
+                                                 ('scaler', StandardScaler())]),
+                                 ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7',
+                                  'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30',
+                                  'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30',
+                                  'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL',
+                                  'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL',
+                                  'AAPL_MOM5', 'AMZN_MOM5', 'GOOGL_MOM5',
+                                  'MSFT_MOM5', 'NVDA_MOM5', 'AAPL_MOM20',
+                                  'AMZN_MOM20', 'GOOGL_MOM20', 'MSFT_MOM20',
+                                  'NVDA_MOM20', 'AAPL_LAG1', 'AMZN_LAG1',
+                                  'GOOGL_LAG1', 'MSFT_LAG1', 'NVDA_LAG1', ...])])
+[2026-03-14 22:04:25,498] 80 root - INFO - Applying preprocessor object on training and test dataframe
+[2026-03-14 22:04:25,507] 91 root - INFO - Saving preprocessing object
+[2026-03-14 22:04:25,508] 26 root - INFO - Splitting training and test input data
+[2026-03-14 22:05:00,249] 84 root - INFO - RandomForest training completed
+[2026-03-14 22:05:17,175] 84 root - INFO - XGBoost training completed
+[2026-03-14 22:05:17,176] 52 root - INFO - Best found mode on dataset XGBoost

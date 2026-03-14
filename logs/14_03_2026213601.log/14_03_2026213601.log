@@ -1,0 +1,24 @@
+[2026-03-14 21:36:01,484] 22 root - INFO - Entered the data ingestion method or component
+[2026-03-14 21:36:03,704] 28 root - INFO - Saved the raw data to csv file
+[2026-03-14 21:36:03,753] 47 root - INFO - Saved the processed data to csv file
+[2026-03-14 21:36:03,792] 53 root - INFO - Ingestion of the data is completed
+[2026-03-14 21:36:03,827] 52 root - INFO - Reading test and train data completed
+[2026-03-14 21:36:03,827] 53 root - INFO - Obtaining Preprocessing Object
+[2026-03-14 21:36:03,827] 42 root - INFO - Numerical columns: ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7', 'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30', 'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30', 'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL', 'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL', 'AAPL_MOM', 'AMZN_MOM', 'GOOGL_MOM', 'MSFT_MOM', 'NVDA_MOM']
+[2026-03-14 21:36:03,831] 43 root - INFO - Preprocessor: ColumnTransformer(transformers=[('num_pipeline',
+                                 Pipeline(steps=[('imputer',
+                                                  SimpleImputer(strategy='median')),
+                                                 ('scaler', StandardScaler())]),
+                                 ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7',
+                                  'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30',
+                                  'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30',
+                                  'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL',
+                                  'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL',
+                                  'AAPL_MOM', 'AMZN_MOM', 'GOOGL_MOM',
+                                  'MSFT_MOM', 'NVDA_MOM'])])
+[2026-03-14 21:36:03,832] 68 root - INFO - Applying preprocessor object on training and test dataframe
+[2026-03-14 21:36:03,839] 79 root - INFO - Saving preprocessing object
+[2026-03-14 21:36:03,840] 25 root - INFO - Splitting training and test input data
+[2026-03-14 21:36:20,642] 82 root - INFO - RandomForest training completed
+[2026-03-14 21:36:26,383] 82 root - INFO - XGBoost training completed
+[2026-03-14 21:36:26,384] 51 root - INFO - Best found mode on dataset XGBoost
