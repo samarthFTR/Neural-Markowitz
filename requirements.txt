@@ -9,3 +9,4 @@ PyPortfolioOpt
 Matplotlib
 Seaborn
 streamlit
+xgboost

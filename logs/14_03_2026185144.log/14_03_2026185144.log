@@ -1,0 +1,21 @@
+[2026-03-14 18:51:44,518] 22 root - INFO - Entered the data ingestion method or component
+[2026-03-14 18:51:45,405] 28 root - INFO - Saved the raw data to csv file
+[2026-03-14 18:51:45,447] 47 root - INFO - Saved the processed data to csv file
+[2026-03-14 18:51:45,484] 51 root - INFO - Ingestion of the data is completed
+[2026-03-14 18:51:45,544] 52 root - INFO - Reading test and train data completed
+[2026-03-14 18:51:45,544] 53 root - INFO - Obtaining Preprocessing Object
+[2026-03-14 18:51:45,544] 42 root - INFO - Numerical columns: ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7', 'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30', 'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30', 'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL', 'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL', 'AAPL_MOM', 'AMZN_MOM', 'GOOGL_MOM', 'MSFT_MOM', 'NVDA_MOM']
+[2026-03-14 18:51:45,548] 43 root - INFO - Preprocessor: ColumnTransformer(transformers=[('num_pipeline',
+                                 Pipeline(steps=[('imputer',
+                                                  SimpleImputer(strategy='median')),
+                                                 ('scaler', StandardScaler())]),
+                                 ['AAPL_MA7', 'AMZN_MA7', 'GOOGL_MA7',
+                                  'MSFT_MA7', 'NVDA_MA7', 'AAPL_MA30',
+                                  'AMZN_MA30', 'GOOGL_MA30', 'MSFT_MA30',
+                                  'NVDA_MA30', 'AAPL_VOL', 'AMZN_VOL',
+                                  'GOOGL_VOL', 'MSFT_VOL', 'NVDA_VOL',
+                                  'AAPL_MOM', 'AMZN_MOM', 'GOOGL_MOM',
+                                  'MSFT_MOM', 'NVDA_MOM'])])
+[2026-03-14 18:51:45,549] 68 root - INFO - Applying preprocessor object on training and test dataframe
+[2026-03-14 18:51:45,555] 79 root - INFO - Saving preprocessing object
+[2026-03-14 18:51:45,556] 24 root - INFO - Splitting training and test input data

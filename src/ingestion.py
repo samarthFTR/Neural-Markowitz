@@ -7,7 +7,7 @@ import yfinance as yf
 from utils.exception import CustomException
 from utils.logger import logging
 from preprocessing import DataTransformation
-
+from training import ModelTraining
 @dataclass
 class DataIngestionConfig:
     train_data_path: str = os.path.join("data","train.csv")
@@ -61,3 +61,5 @@ if __name__ == "__main__":
 
     Data_Transformation=DataTransformation()
     train_arr,test_arr,_=Data_Transformation.initiate_data_transformation(train_data,test_data)
+    modeltrain = ModelTraining()
+    print(modeltrain.initiate_model_train(test_array=test_arr,train_array=train_arr))
