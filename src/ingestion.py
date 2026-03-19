@@ -21,7 +21,7 @@ class DataIngestion:
     def initiate_data_ingestion(self):
         logging.info("Entered the data ingestion method or component")
         try:
-            stocks = ["AAPL","MSFT","GOOGL","AMZN","NVDA"]
+            stocks = ["AAPL","MSFT","GOOGL","AMZN","NVDA","META","NFLX","TSLA","ADBE","INTC","AMD"]
             data = yf.download(stocks, start="2018-01-01", end="2026-01-01")
             close = data["Close"]
             close.to_csv(self.ingestion_config.raw_data_path)
