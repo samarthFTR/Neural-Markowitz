@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+portfolio_spo.egg-info/PKG-INFO
+portfolio_spo.egg-info/SOURCES.txt
+portfolio_spo.egg-info/dependency_links.txt
+portfolio_spo.egg-info/requires.txt
+portfolio_spo.egg-info/top_level.txt
+src/__init__.py
+src/config.py
+src/ingestion.py
+src/preprocessing.py
+src/training.py
+src/utils/__init__.py
+src/utils/exception.py
+src/utils/logger.py
+src/utils/utils.py

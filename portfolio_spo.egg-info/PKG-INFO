@@ -1,0 +1,136 @@
+Metadata-Version: 2.4
+Name: portfolio-spo
+Version: 0.1.0
+Summary: Portfolio optimization using statistical and ML models
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy<3,>=1.24
+Requires-Dist: pandas<3,>=2.0
+Requires-Dist: yfinance>=0.2
+Requires-Dist: scikit-learn<2,>=1.3
+Requires-Dist: xgboost<3,>=2.0
+Requires-Dist: scipy<2,>=1.10
+Requires-Dist: cvxpy<2,>=1.4
+Requires-Dist: pyportfolioopt<2,>=1.5
+Requires-Dist: matplotlib<4,>=3.7
+Requires-Dist: seaborn<1,>=0.13
+Requires-Dist: streamlit<2,>=1.28
+
+## Portfolio Optimization using Statistical & ML Models
+
+This project builds a small end‑to‑end pipeline for **equity return forecasting** as a building block for portfolio optimization. It:
+
+- **Downloads historical prices** for a set of large‑cap U.S. stocks using `yfinance`
+- **Engineers features** such as moving averages, volatility, momentum, and lagged returns
+- **Builds a supervised learning dataset** with **next‑day returns as targets** (features at day *t* predict returns from *t* to *t+1*)
+- **Scales and preprocesses** the data with `scikit-learn` transformers
+- **Trains and tunes multi‑output regression models** (Random Forest and XGBoost) using **time‑series cross‑validation only** for model selection
+- **Evaluates once** on a held‑out chronological test set and reports R², per‑ticker Spearman IC, directional accuracy, and simple baselines
+- **Persists artifacts** (preprocessor and best model) to disk for later use in downstream portfolio‑construction experiments
+
+The current focus is on forecasting; **portfolio construction** (e.g. using `cvxpy` / `PyPortfolioOpt`) is **planned** and not wired in `src/` yet—these libraries are included so you can layer optimization on top of saved predictions.
+
+---
+
+## Project Structure
+
+- **`src/`**
+  - **`config.py`**: Single source of truth for `TICKERS` (feature universe), `TARGET_TICKERS` (multi‑output labels), and column naming helpers.
+  - **`ingestion.py`**: Downloads OHLC data for the configured universe, engineers features / targets, creates `portfolio_dataset.csv`, and splits it into `train.csv` and `test.csv`.
+  - **`preprocessing.py`**: `DataTransformation` builds a `ColumnTransformer` pipeline, fits on training data, transforms train/test, saves `data/processor.pkl`.
+  - **`training.py`**: `ModelTraining` splits arrays into features and `NUM_TARGETS`‑dimensional targets, tunes models with `TimeSeriesSplit` + `GridSearchCV`, **selects the best model by mean CV R²** (no test‑set peeking), then reports metrics on train and **once** on test. Returns a **dict** with `train`, `test`, `baselines`, and `mean_cv_r2`.
+  - **`utils/utils.py`**: `save_object` / `load_object` using **pickle** for models and preprocessors.
+  - **`utils/logger.py`**: Logging to the `logs/` directory.
+  - **`utils/exception.py`**: Custom exception with filename and line number.
+- **`data/`** — raw, engineered, train/test CSVs and `processor.pkl`
+- **`models/`** — `model.pkl`
+- **`logs/`** — runtime logs
+- **`pyproject.toml`**: Package metadata and dependencies (install with `pip install -e .`).
+- **`requirements.txt`**: Same dependency ranges; use together with editable install.
+
+---
+
+## Data & Features
+
+**Feature universe** (`TICKERS` in [`src/config.py`](src/config.py)): eleven large‑cap names (e.g. `AAPL`, `MSFT`, `GOOGL`, `AMZN`, `NVDA`, `META`, `NFLX`, `TSLA`, `ADBE`, `INTC`, `AMD`). **Targets** are next‑day returns for the five‑name subset `TARGET_TICKERS` (`AAPL`, `AMZN`, `GOOGL`, `MSFT`, `NVDA`).
+
+Using daily close prices from `2018-01-01` to `2026-01-01`, the pipeline computes:
+
+- **Rolling means**: 7‑day and 30‑day moving averages (`_MA7`, `_MA30`)
+- **Rolling volatility**: 30‑day rolling std of returns (`_VOL`)
+- **Momentum**: 20‑day price momentum (`_MOM20`)
+- **Lagged returns**: previous‑day returns (`_LAG1`)
+- **Targets**: next‑day returns (`_TARGET`)
+
+Rows with missing values are dropped. The dataset is split **75% train / 25% test** in time order (no shuffle).
+
+---
+
+## Model Training Workflow
+
+End‑to‑end training is driven by `python -m src.ingestion` from the project root (after `pip install -e .`):
+
+1. **Data ingestion** — download, engineer, write CSVs.
+2. **Preprocessing** — fit scaler on train; transform train and test; save `processor.pkl`.
+3. **Model training** — `GridSearchCV` with `TimeSeriesSplit` and `scoring='r2'`; **best model = highest mean CV R²**. The **test set is used only for the final printed metrics**, not for choosing Random Forest vs XGBoost.
+
+`ModelTraining.initiate_model_train` returns a dictionary with labeled train/test metrics, per‑ticker Spearman IC, directional accuracy, and test baselines (zero predictor and train‑mean predictor).
+
+---
+
+## Installation
+
+1. **Create and activate a virtual environment** (recommended).
+
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate  # on Windows
+   # source .venv/bin/activate  # on macOS / Linux
+   ```
+
+2. **Install the package in editable mode** (registers the `src` package so imports resolve).
+
+   From the project root:
+
+   ```bash
+   pip install -r requirements.txt
+   pip install -e .
+   ```
+
+   > `cvxpy` and `PyPortfolioOpt` may require build tools on some systems. They are optional for the current training pipeline.
+
+---
+
+## Usage
+
+From the project root:
+
+```bash
+python -m src.ingestion
+```
+
+This downloads data (network required), rebuilds engineered files, fits preprocessing, trains/tunes models, and saves `data/processor.pkl` and `models/model.pkl`.
+
+Load artifacts in Python:
+
+```python
+from src.utils.utils import load_object
+
+preprocessor = load_object("data/processor.pkl")
+model = load_object("models/model.pkl")
+```
+
+---
+
+## Extending the Project
+
+- **Portfolio optimization layer**: use predicted returns and an estimated covariance matrix (e.g. mean‑variance, risk‑parity) via `cvxpy` or `PyPortfolioOpt`.
+- **Custom universes**: adjust `TICKERS` / `TARGET_TICKERS` in `src/config.py`.
+- **Backtesting**: walk‑forward or purged CV for stricter finance ML evaluation.
+- **Models**: additional estimators or `RandomizedSearchCV` for large grids.
+
+---
+
+## Disclaimer
+
+This project is for **educational and research purposes only** and **does not constitute financial advice**. Past performance and model predictions are not guarantees of future returns. Always do your own research and consult a qualified professional before making investment decisions.

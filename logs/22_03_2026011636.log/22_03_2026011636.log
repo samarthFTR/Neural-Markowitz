@@ -1,0 +1,27 @@
+[2026-03-22 01:16:37,007] 28 root - INFO - Entered the data ingestion method or component
+[2026-03-22 01:16:40,243] 34 root - INFO - Saved the raw data to csv file
+[2026-03-22 01:16:40,357] 60 root - INFO - Saved the processed data to csv file
+[2026-03-22 01:16:40,468] 70 root - INFO - Ingestion of the data is completed
+[2026-03-22 01:16:40,512] 52 root - INFO - Reading test and train data completed
+[2026-03-22 01:16:40,512] 53 root - INFO - Obtaining Preprocessing Object
+[2026-03-22 01:16:40,512] 41 root - INFO - Numerical columns (55): ['AAPL_MA7', 'AAPL_MA30', 'AAPL_VOL', 'AAPL_MOM20', 'AAPL_LAG1']...
+[2026-03-22 01:16:40,516] 42 root - INFO - Preprocessor: ColumnTransformer(transformers=[('num_pipeline',
+                                 Pipeline(steps=[('imputer',
+                                                  SimpleImputer(strategy='median')),
+                                                 ('scaler', StandardScaler())]),
+                                 ['AAPL_MA7', 'AAPL_MA30', 'AAPL_VOL',
+                                  'AAPL_MOM20', 'AAPL_LAG1', 'MSFT_MA7',
+                                  'MSFT_MA30', 'MSFT_VOL', 'MSFT_MOM20',
+                                  'MSFT_LAG1', 'GOOGL_MA7', 'GOOGL_MA30',
+                                  'GOOGL_VOL', 'GOOGL_MOM20', 'GOOGL_LAG1',
+                                  'AMZN_MA7', 'AMZN_MA30', 'AMZN_VOL',
+                                  'AMZN_MOM20', 'AMZN_LAG1', 'NVDA_MA7',
+                                  'NVDA_MA30', 'NVDA_VOL', 'NVDA_MOM20',
+                                  'NVDA_LAG1', 'META_MA7', 'META_MA30',
+                                  'META_VOL', 'META_MOM20', 'META_LAG1', ...])])
+[2026-03-22 01:16:40,517] 62 root - INFO - Applying preprocessor object on training and test dataframe
+[2026-03-22 01:16:40,527] 77 root - INFO - Saving preprocessing object
+[2026-03-22 01:16:40,528] 73 root - INFO - Splitting training and test input data
+[2026-03-22 01:17:17,435] 185 root - INFO - RandomForest GridSearchCV best mean CV R²: -0.317975
+[2026-03-22 01:19:13,328] 185 root - INFO - XGBoost GridSearchCV best mean CV R²: -0.066884
+[2026-03-22 01:19:13,328] 109 root - INFO - Best model by mean time-series CV R2: XGBoost (-0.066884)
