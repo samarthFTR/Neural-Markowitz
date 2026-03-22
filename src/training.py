@@ -7,8 +7,10 @@ from sklearn.metrics import r2_score
 from sklearn.model_selection import GridSearchCV
 from dataclasses import dataclass
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.multioutput import MultiOutputRegressor
 from scipy.stats import spearmanr
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 
 import sys
 from utils.exception import CustomException
@@ -26,26 +28,33 @@ class ModelTraining:
         try:
             logging.info("Splitting training and test input data")
             X_train,y_train,X_test,y_test=(
-                train_array[:,:-5],
-                train_array[:,-5:],
-                test_array[:,:-5],
-                test_array[:,-5:],
+                train_array[:,:-1],
+                train_array[:,-1:],
+                test_array[:,:-1],
+                test_array[:,-1:],
                 )
+            
             models = {
-                "RandomForest": RandomForestRegressor(),
-                "XGBoost": MultiOutputRegressor(XGBRegressor())
+                "RandomForest": Pipeline([
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("regressor", RandomForestRegressor())
+                ]),
+                "XGBoost": Pipeline([
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("regressor", XGBRegressor())
+                ])
             }
             params = {
                 "RandomForest": {
-                    "n_estimators":[100,200],
-                    "max_depth":[10,20]
+                    "regressor__n_estimators":[100,200],
+                    "regressor__max_depth":[10,20]
                 },
                 "XGBoost":{
-                    "estimator__n_estimators":[100,200],
-                    "estimator__max_depth":[3,5],
-                    "estimator__learning_rate":[0.01,0.1],
-                    "estimator__subsample": [0.7,0.9],
-                    "estimator__colsample_bytree": [0.7,0.9]
+                    "regressor__n_estimators":[100,200],
+                    "regressor__max_depth":[3,5],
+                    "regressor__learning_rate":[0.01,0.1],
+                    "regressor__subsample": [0.7,0.9],
+                    "regressor__colsample_bytree": [0.7,0.9]
                 }
             }
             model_report, trained_models= ModelTraining.evaluate_models(X_train=X_train,y_train=y_train,X_test=X_test,y_test=y_test,models=models,params=params)

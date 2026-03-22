@@ -22,27 +22,10 @@ class DataTransformation:
         self.data_transformation_config = DataTransformationConfig()
     def get_data_transformer_object(self):
         try:
-            tickers = ["AAPL","MSFT","GOOGL","AMZN","NVDA","META","NFLX","TSLA","ADBE","INTC","AMD"]
-            features = []
-            for t in tickers:
-                features.extend([
-                    f"{t}_MA7",
-                    f"{t}_MA30",
-                    f"{t}_VOL",
-                    f"{t}_MOM20",
-                    f"{t}_LAG1"
-                ])
-            print(features)
-            numerical_columns = features
-            num_pipeline = Pipeline(
-                steps=[
-                    ("imputer",SimpleImputer(strategy="median")),
-                    ("scaler",StandardScaler())
-                ]
-            )
+            numerical_columns = ["MA7", "MA30", "VOL", "MOM20", "LAG1", "LAG0"]
             preprocessor = ColumnTransformer(
                 [
-                    ("num_pipeline",num_pipeline,numerical_columns),
+                    ("num_pipeline","passthrough",numerical_columns),
                 ]
             )
             logging.info(f'Numerical columns: {numerical_columns}')
@@ -60,17 +43,11 @@ class DataTransformation:
 
             preprocessor = self.get_data_transformer_object()
 
-            target_columns = ["AAPL_TARGET","AMZN_TARGET","GOOGL_TARGET","MSFT_TARGET","NVDA_TARGET"]
-            numerical_columns = [
-                "AAPL_MA7","AMZN_MA7","GOOGL_MA7","MSFT_MA7","NVDA_MA7",
-                "AAPL_MA30","AMZN_MA30","GOOGL_MA30","MSFT_MA30","NVDA_MA30",
-                "AAPL_VOL","AMZN_VOL","GOOGL_VOL","MSFT_VOL","NVDA_VOL",
-                "AAPL_MOM20","AMZN_MOM20","GOOGL_MOM20","MSFT_MOM20","NVDA_MOM20",
-                "AAPL_LAG1","AMZN_LAG1","GOOGL_LAG1","MSFT_LAG1","NVDA_LAG1",
-                ]
+            target_columns = ["TARGET"]
+            drop_columns = ["Date", "Ticker"]
 
-            input_feature_train_df = train_df.drop(columns=target_columns,axis=1)
-            input_feature_test_df = test_df.drop(columns=target_columns,axis=1)
+            input_feature_train_df = train_df.drop(columns=target_columns + drop_columns,axis=1)
+            input_feature_test_df = test_df.drop(columns=target_columns + drop_columns,axis=1)
 
             logging.info(f"Applying preprocessor object on training and test dataframe")
 

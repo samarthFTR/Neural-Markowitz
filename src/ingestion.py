@@ -21,42 +21,67 @@ class DataIngestion:
     def initiate_data_ingestion(self):
         logging.info("Entered the data ingestion method or component")
         try:
-            stocks = ["AAPL","MSFT","GOOGL","AMZN","NVDA","META","NFLX","TSLA","ADBE","INTC","AMD"]
+            stocks = ["AAPL","MSFT","GOOGL","AMZN","NVDA"]
             data = yf.download(stocks, start="2018-01-01", end="2026-01-01")
             close = data["Close"]
             close.to_csv(self.ingestion_config.raw_data_path)
             logging.info("Saved the raw data to csv file")
+            
             returns = close.pct_change()
             future_returns = (close.shift(-1) / close) - 1
 
-            ma7 = close.rolling(7).mean()
-            ma30 = close.rolling(30).mean()
-
+            # Fix non-stationarity by dividing by current price
+            ma7_dev = (close.rolling(7).mean() / close) - 1
+            ma30_dev = (close.rolling(30).mean() / close) - 1
+            
             volatility = returns.rolling(30).std()
-
             momentum20 = close / close.shift(20) - 1
-
             lag1 = returns.shift(1)
+            lag0 = returns.copy() # Current day return
 
-            dataset = pd.concat(
-                [
-                    ma7.add_suffix("_MA7"),
-                    ma30.add_suffix("_MA30"),
-                    volatility.add_suffix("_VOL"),
-                    momentum20.add_suffix("_MOM20"),
-                    lag1.add_suffix("_LAG1"),
-                    future_returns.add_suffix("_TARGET"),
-                ],
-                axis=1,
-            )
+            # Function to compute daily cross-sectional Z-scores
+            def cross_sectional_zscore(df):
+                return df.sub(df.mean(axis=1), axis=0).div(df.std(axis=1) + 1e-8, axis=0)
+
+            ma7_cs = cross_sectional_zscore(ma7_dev)
+            ma30_cs = cross_sectional_zscore(ma30_dev)
+            vol_cs = cross_sectional_zscore(volatility)
+            mom20_cs = cross_sectional_zscore(momentum20)
+            lag1_cs = cross_sectional_zscore(lag1)
+            lag0_cs = cross_sectional_zscore(lag0)
+
+            # Convert wide formats to long format
+            dataset = pd.concat([
+                ma7_cs.stack(),
+                ma30_cs.stack(),
+                vol_cs.stack(),
+                mom20_cs.stack(),
+                lag1_cs.stack(),
+                lag0_cs.stack(),
+                future_returns.stack()
+            ], axis=1, keys=['MA7', 'MA30', 'VOL', 'MOM20', 'LAG1', 'LAG0', 'TARGET'])
+            
+            dataset = dataset.reset_index()
+            dataset.rename(columns={'level_0': 'Date', 'level_1': 'Ticker'}, inplace=True)
+            
+            # Drop NaNs after stacking
             dataset = dataset.dropna()
-            dataset.to_csv(self.ingestion_config.portfolio_dataset_path)
-            logging.info("Saved the processed data to csv file")
-            split_index = int(len(dataset) * 0.75)
-            train_set = dataset.iloc[:split_index]
-            test_set = dataset.iloc[split_index:]
-            train_set.to_csv(self.ingestion_config.train_data_path,index=False,header=True)
-            test_set.to_csv(self.ingestion_config.test_data_path,index=False,header=True)
+            
+            # Sort chronologically
+            dataset = dataset.sort_values(by=['Date', 'Ticker']).reset_index(drop=True)
+
+            dataset.to_csv(self.ingestion_config.portfolio_dataset_path, index=False)
+            logging.info("Saved the processed long format data to csv file")
+            
+            # Time-Series split needs to respect exact Date boundaries in long format
+            dates = dataset['Date'].unique()
+            split_date = dates[int(len(dates) * 0.75)]
+            
+            train_set = dataset[dataset['Date'] < split_date]
+            test_set = dataset[dataset['Date'] >= split_date]
+            
+            train_set.to_csv(self.ingestion_config.train_data_path, index=False, header=True)
+            test_set.to_csv(self.ingestion_config.test_data_path, index=False, header=True)
             logging.info("Ingestion of the data is completed")
             return(
                 self.ingestion_config.train_data_path,
