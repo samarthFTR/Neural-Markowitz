@@ -26,7 +26,8 @@ class DataTransformation:
                 "RET_1D", "RET_5D", "RET_10D", 
                 "MOM_10", "MOM_20", 
                 "VOL_5", "VOL_10", 
-                "ALPHA_1D", "RANK_MOM_10"
+                "ALPHA_1D", "RANK_MOM_10",
+                "ANTI_MOM_10"
             ]
             preprocessor = ColumnTransformer(
                 [

@@ -45,39 +45,29 @@ class DataIngestion:
             market_ret = ret_1d.mean(axis=1)
             alpha_1d = ret_1d.sub(market_ret, axis=0)
 
-            # 3. Rank Features
+            # 3. Rank & Regime Features
             rank_mom_10 = mom_10.rank(axis=1)
+            anti_mom_10 = -mom_10  # Explicitly model short-term mean reversion
 
-            # Function to compute daily cross-sectional Z-scores
-            def cross_sectional_zscore(df):
-                return df.sub(df.mean(axis=1), axis=0).div(df.std(axis=1) + 1e-8, axis=0)
-
-            # Cross-sectionally scale the raw continuous features for inter-asset learning
-            ret_1d_cs = cross_sectional_zscore(ret_1d)
-            ret_5d_cs = cross_sectional_zscore(ret_5d)
-            ret_10d_cs = cross_sectional_zscore(ret_10d)
-            mom_10_cs = cross_sectional_zscore(mom_10)
-            mom_20_cs = cross_sectional_zscore(mom_20)
-            vol_5_cs = cross_sectional_zscore(vol_5)
-            vol_10_cs = cross_sectional_zscore(vol_10)
-
-            # Convert wide formats to long format
+            # Convert wide formats to long format natively using raw signals
             dataset = pd.concat([
-                ret_1d_cs.stack(),
-                ret_5d_cs.stack(),
-                ret_10d_cs.stack(),
-                mom_10_cs.stack(),
-                mom_20_cs.stack(),
-                vol_5_cs.stack(),
-                vol_10_cs.stack(),
+                ret_1d.stack(),
+                ret_5d.stack(),
+                ret_10d.stack(),
+                mom_10.stack(),
+                mom_20.stack(),
+                vol_5.stack(),
+                vol_10.stack(),
                 alpha_1d.stack(),
                 rank_mom_10.stack(),
+                anti_mom_10.stack(),
                 future_returns.stack()
             ], axis=1, keys=[
                 'RET_1D', 'RET_5D', 'RET_10D', 
                 'MOM_10', 'MOM_20', 
                 'VOL_5', 'VOL_10', 
                 'ALPHA_1D', 'RANK_MOM_10', 
+                'ANTI_MOM_10',
                 'TARGET'
             ])
             
