@@ -30,36 +30,56 @@ class DataIngestion:
             returns = close.pct_change()
             future_returns = (close.shift(-1) / close) - 1
 
-            # Fix non-stationarity by dividing by current price
-            ma7_dev = (close.rolling(7).mean() / close) - 1
-            ma30_dev = (close.rolling(30).mean() / close) - 1
-            
-            volatility = returns.rolling(30).std()
-            momentum20 = close / close.shift(20) - 1
-            lag1 = returns.shift(1)
-            lag0 = returns.copy() # Current day return
+            # 1. Base Alpha Features
+            ret_1d  = close.pct_change(1)
+            ret_5d  = close.pct_change(5)
+            ret_10d = close.pct_change(10)
+
+            mom_10 = close / close.shift(10) - 1
+            mom_20 = close / close.shift(20) - 1
+
+            vol_5  = ret_1d.rolling(5).std()
+            vol_10 = ret_1d.rolling(10).std()
+
+            # 2. Relative Strength
+            market_ret = ret_1d.mean(axis=1)
+            alpha_1d = ret_1d.sub(market_ret, axis=0)
+
+            # 3. Rank Features
+            rank_mom_10 = mom_10.rank(axis=1)
 
             # Function to compute daily cross-sectional Z-scores
             def cross_sectional_zscore(df):
                 return df.sub(df.mean(axis=1), axis=0).div(df.std(axis=1) + 1e-8, axis=0)
 
-            ma7_cs = cross_sectional_zscore(ma7_dev)
-            ma30_cs = cross_sectional_zscore(ma30_dev)
-            vol_cs = cross_sectional_zscore(volatility)
-            mom20_cs = cross_sectional_zscore(momentum20)
-            lag1_cs = cross_sectional_zscore(lag1)
-            lag0_cs = cross_sectional_zscore(lag0)
+            # Cross-sectionally scale the raw continuous features for inter-asset learning
+            ret_1d_cs = cross_sectional_zscore(ret_1d)
+            ret_5d_cs = cross_sectional_zscore(ret_5d)
+            ret_10d_cs = cross_sectional_zscore(ret_10d)
+            mom_10_cs = cross_sectional_zscore(mom_10)
+            mom_20_cs = cross_sectional_zscore(mom_20)
+            vol_5_cs = cross_sectional_zscore(vol_5)
+            vol_10_cs = cross_sectional_zscore(vol_10)
 
             # Convert wide formats to long format
             dataset = pd.concat([
-                ma7_cs.stack(),
-                ma30_cs.stack(),
-                vol_cs.stack(),
-                mom20_cs.stack(),
-                lag1_cs.stack(),
-                lag0_cs.stack(),
+                ret_1d_cs.stack(),
+                ret_5d_cs.stack(),
+                ret_10d_cs.stack(),
+                mom_10_cs.stack(),
+                mom_20_cs.stack(),
+                vol_5_cs.stack(),
+                vol_10_cs.stack(),
+                alpha_1d.stack(),
+                rank_mom_10.stack(),
                 future_returns.stack()
-            ], axis=1, keys=['MA7', 'MA30', 'VOL', 'MOM20', 'LAG1', 'LAG0', 'TARGET'])
+            ], axis=1, keys=[
+                'RET_1D', 'RET_5D', 'RET_10D', 
+                'MOM_10', 'MOM_20', 
+                'VOL_5', 'VOL_10', 
+                'ALPHA_1D', 'RANK_MOM_10', 
+                'TARGET'
+            ])
             
             dataset = dataset.reset_index()
             dataset.rename(columns={'level_0': 'Date', 'level_1': 'Ticker'}, inplace=True)

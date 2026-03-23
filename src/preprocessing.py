@@ -22,7 +22,12 @@ class DataTransformation:
         self.data_transformation_config = DataTransformationConfig()
     def get_data_transformer_object(self):
         try:
-            numerical_columns = ["MA7", "MA30", "VOL", "MOM20", "LAG1", "LAG0"]
+            numerical_columns = [
+                "RET_1D", "RET_5D", "RET_10D", 
+                "MOM_10", "MOM_20", 
+                "VOL_5", "VOL_10", 
+                "ALPHA_1D", "RANK_MOM_10"
+            ]
             preprocessor = ColumnTransformer(
                 [
                     ("num_pipeline","passthrough",numerical_columns),
