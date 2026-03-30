@@ -1,5 +1,6 @@
 import os
 import sys
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from dataclasses import dataclass
@@ -21,14 +22,30 @@ class DataIngestion:
     def initiate_data_ingestion(self):
         logging.info("Entered the data ingestion method or component")
         try:
-            stocks = ["AAPL","MSFT","GOOGL","AMZN","NVDA"]
+            stocks = [
+                # Tech/CommServices
+                "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "NFLX", "AMD", "INTC", 
+                "CSCO", "IBM", "ORCL", "QCOM", "TXN", "AVGO", "CRM", "ACN",
+                # Financials
+                "JPM", "V", "BAC", "MA", "WFC", "C", "GS", "MS", "AXP", "SCHW", "BLK",
+                # Healthcare
+                "JNJ", "UNH", "LLY", "PFE", "ABBV", "TMO", "MRK", "DHR", "ABT", "BMY", "AMGN",
+                # Consumer
+                "WMT", "PG", "HD", "MCD", "NKE", "SBUX", "TGT", "LOW", "COST", "DIS", "TMUS", "VZ",
+                # Industrials & Energy
+                "XOM", "CVX", "COP", "SLB", "CAT", "BA", "HON", "UNP", "MMM", "GE", "RTX", "LMT"
+            ]
             data = yf.download(stocks, start="2018-01-01", end="2026-01-01")
             close = data["Close"]
             close.to_csv(self.ingestion_config.raw_data_path)
             logging.info("Saved the raw data to csv file")
             
             returns = close.pct_change()
-            future_returns = (close.shift(-1) / close) - 1
+            future_returns = (close.shift(-5) / close) - 1
+            
+            daily_top_quintile = future_returns.quantile(0.8, axis=1)
+            target_class = future_returns.ge(daily_top_quintile, axis=0).astype(float)
+            target_class = target_class.where(future_returns.notna(), np.nan)
 
             # 1. Base Alpha Features
             ret_1d  = close.pct_change(1)
@@ -61,14 +78,14 @@ class DataIngestion:
                 alpha_1d.stack(),
                 rank_mom_10.stack(),
                 anti_mom_10.stack(),
-                future_returns.stack()
+                target_class.stack()
             ], axis=1, keys=[
                 'RET_1D', 'RET_5D', 'RET_10D', 
                 'MOM_10', 'MOM_20', 
                 'VOL_5', 'VOL_10', 
                 'ALPHA_1D', 'RANK_MOM_10', 
                 'ANTI_MOM_10',
-                'TARGET'
+                'TARGET_CLASS'
             ])
             
             dataset = dataset.reset_index()

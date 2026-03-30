@@ -49,7 +49,7 @@ class DataTransformation:
 
             preprocessor = self.get_data_transformer_object()
 
-            target_columns = ["TARGET"]
+            target_columns = ["TARGET_CLASS"]
             drop_columns = ["Date", "Ticker"]
 
             input_feature_train_df = train_df.drop(columns=target_columns + drop_columns,axis=1)
