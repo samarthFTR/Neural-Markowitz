@@ -1,37 +1,46 @@
 ## Portfolio Optimization using Statistical & ML Models
 
-This project builds a small end‑to‑end pipeline for **equity return forecasting** as a building block for portfolio optimization. It:
+This project builds an end‑to‑end pipeline for **equity return forecasting and stock ranking** as a core building block for portfolio optimization. It uses a **stacked Machine Learning architecture** combining classification and regression models.
 
-- **Downloads historical prices** for a set of large‑cap U.S. stocks using `yfinance`
-- **Engineers features** such as moving averages, volatility, momentum, and lagged returns
-- **Builds a supervised learning dataset** with **next‑day returns as targets**
-- **Scales and preprocesses** the data with `scikit-learn` transformers
-- **Trains and tunes multi‑output regression models** (Random Forest and XGBoost)
-- **Persists artifacts** (preprocessor and best model) to disk for later use in downstream portfolio‑construction experiments
-
-The current focus is on forecasting; portfolio construction (e.g. using `cvxpy` / `PyPortfolioOpt`) can be layered on top of the saved predictions.
+- **Downloads historical prices** for a diverse universe of 40+ large‑cap U.S. stocks across different sectors using `yfinance`.
+- **Engineers alpha features** such as momentum, volatility, relative strength, rank features, and explicit mean-reversion signals.
+- **Builds a supervised learning dataset** with dual targets:
+  - `TARGET_CLASS`: A binary indicator for stocks in the daily top quintile of returns.
+  - `TARGET_RETURN`: The continuous forward 5-day return.
+- **Scales and preprocesses** data natively in long-format using `scikit-learn` transformers.
+- **Trains a Stacked Model Architecture**:
+  - **Base Layer (Classification)**: Predicts the probability of a stock being in the top quintile.
+  - **Meta-Feature Building**: Uses classifier probabilities as new features.
+  - **Top Layer (Regression)**: Predicts continuous returns using original features plus classifier probabilities to correctly rank stocks.
+- **Evaluates with Quant Metrics**: Evaluates models using Spearman Rank Correlation (IC) and Top-K portfolio lift.
+- **Persists artifacts** (preprocessor and the full stacked model) to disk for later use in downstream portfolio‑construction.
 
 ---
 
 ## Project Structure
 
 - **`src/`**
-  - **`ingestion.py`**: Downloads OHLC data for a fixed stock universe, engineers features / targets, creates the main `portfolio_dataset.csv`, and splits it into `train.csv` and `test.csv`.
-  - **`preprocessing.py`**: Defines the `DataTransformation` class, which builds a `ColumnTransformer` pipeline for numerical features, fits it on the training set, transforms train/test, and saves the fitted preprocessor to `data/processor.pkl`.
-  - **`training.py`**: Defines `ModelTraining`, which:
-    - splits the transformed arrays into features and 5‑dimensional target vectors (one per stock),
-    - tunes `RandomForestRegressor` and `MultiOutputRegressor(XGBRegressor)` with `TimeSeriesSplit` + `GridSearchCV`,
-    - selects the best model by test R² and saves it to `models/model.pkl`.
-  - **`utils/utils.py`**: Helper functions for saving and loading Python objects (models, transformers).
-  - **`utils/logger.py`**: Basic logging configuration that writes timestamped logs into the `logs/` directory.
-  - **`utils/exception.py`**: Custom exception class with richer error messages (filename + line number).
+  - **`ingestion.py`**: Downloads OHLC data for the stock universe, engineers features and dual targets, melts data into a long format, creates the main `portfolio_dataset.csv`, and performs a time-aware train/test split.
+  - **`preprocessing.py`**: Defines `DataTransformation`, which builds a `ColumnTransformer` for numerical features, fits it on the training set, transforms data, stacks both targets back into the output arrays, and saves the preprocessor to `data/processor.pkl`.
+  - **`training.py`**: Defines `ModelTraining`, which executes the stacked pipeline:
+    - Splits arrays into features, `TARGET_CLASS`, and `TARGET_RETURN`.
+    - **Stage 1**: Trains and tunes classifiers (RandomForest, XGBoost) using `TimeSeriesSplit`.
+    - **Stage 2**: Generates out-of-fold probability predictions as meta-features.
+    - **Stage 3**: Trains and tunes regressors (Ridge, XGBRegressor, RandomForestRegressor) on augmented features.
+    - **Stage 4**: Evaluates ranking performance using Spearman IC and Top-K portfolio return.
+    - Saves individual models and the stacked ensemble to `models/`.
+  - **`utils/utils.py`**: Helper functions for saving and loading Python objects.
+  - **`utils/logger.py`**: Basic logging configuration writing to `logs/`.
+  - **`utils/exception.py`**: Custom exception class for rich error tracing.
 - **`data/`**
   - **`raw data/raw.csv`**: Raw close prices downloaded from `yfinance`.
-  - **`portfolio_dataset.csv`**: Engineered feature + target dataset.
-  - **`train.csv`, `test.csv`**: Train / test splits of the dataset.
+  - **`portfolio_dataset.csv`**: Engineered feature + target dataset in long format.
+  - **`train.csv`, `test.csv`**: Train / test splits (split chronologically).
   - **`processor.pkl`**: Persisted preprocessing pipeline.
 - **`models/`**
-  - **`model.pkl`**: Persisted best‑performing regression model.
+  - **`classifier.pkl`**: Best performing base classifier.
+  - **`regressor.pkl`**: Best performing ranking regressor.
+  - **`model.pkl`**: Full stacked model dictionary containing all reports and best estimators.
 - **`logs/`**
   - Timestamped log folders created at runtime.
 - **`requirements.txt`**: Python dependencies.
@@ -40,45 +49,39 @@ The current focus is on forecasting; portfolio construction (e.g. using `cvxpy` 
 
 ## Data & Features
 
-The pipeline currently uses a hard‑coded universe of 5 stocks:
-
-- `AAPL`, `MSFT`, `GOOGL`, `AMZN`, `NVDA`
+The pipeline uses a diversified universe of large-cap stocks across sectors (e.g., AAPL, MSFT, JPM, WMT, XOM, JNJ, etc.).
 
 Using daily close prices from `2018-01-01` to `2026-01-01`, it computes:
 
-- **Rolling means**: 7‑day and 30‑day moving averages (suffix `_MA7`, `_MA30`)
-- **Rolling volatility**: 30‑day rolling standard deviation of returns (suffix `_VOL`)
-- **Momentum**: 20‑day price momentum (suffix `_MOM20`)
-- **Lagged returns**: previous‑day returns (suffix `_LAG1`)
-- **Targets**: next‑day returns (suffix `_TARGET`)
+- **Base Alpha Features**: 1D, 5D, 10D returns.
+- **Momentum**: 10-day and 20-day momentum.
+- **Volatility**: 5-day and 10-day rolling standard deviations.
+- **Relative Strength**: Stock return minus cross-sectional mean return (`ALPHA_1D`).
+- **Rank & Regime Features**: Cross-sectional momentum rank (`RANK_MOM_10`) and anti-momentum (modeling short-term mean reversion).
+- **Dual Targets**:
+  - `TARGET_RETURN`: Forward 5-day return (`shift(-5)`).
+  - `TARGET_CLASS`: 1 if forward return is in the top 20% cross-sectionally for that day, else 0.
 
-All features are concatenated into a single DataFrame, rows with missing values are dropped, and the final dataset is split \(75% train / 25% test\).
+The dataset is reshaped into a **long format** (`Date`, `Ticker`, `Features...`) ensuring that cross-sectional operations are handled correctly.
 
 ---
 
 ## Model Training Workflow
 
-End‑to‑end training (data ingestion → preprocessing → model training) is driven by `src/ingestion.py` when executed as a script:
+End‑to‑end training is driven by executing `src/ingestion.py`:
 
-1. **Data ingestion**
-   - Downloads prices with `yfinance`.
-   - Builds engineered dataset and writes:
-     - `data/raw data/raw.csv`
-     - `data/portfolio_dataset.csv`
-     - `data/train.csv`
-     - `data/test.csv`
+1. **Data Ingestion**
+   - Downloads prices via `yfinance`.
+   - Computes features, generates targets, and builds the long-format dataset.
+   - Performs a chronological 75/25 split to prevent lookahead bias.
 2. **Preprocessing**
-   - `DataTransformation.initiate_data_transformation(train_path, test_path)`:
-     - Fits a numerical pipeline (`SimpleImputer` + `StandardScaler`) on all engineered features.
-     - Transforms train and test features.
-     - Saves the fitted preprocessor to `data/processor.pkl`.
-3. **Model training**
-   - `ModelTraining.initiate_model_train(train_array, test_array)`:
-     - Tunes Random Forest and XGBoost via `GridSearchCV` with `TimeSeriesSplit`.
-     - Selects the best model by test R².
-     - Saves the best model to `models/model.pkl`.
-
-The script prints the training R² and logs intermediate steps to the `logs/` folder.
+   - Fits a pipeline (`SimpleImputer` + `StandardScaler` (passed through)) on training features.
+   - Outputs Numpy arrays containing `[...features, TARGET_CLASS, TARGET_RETURN]`.
+3. **Stacked Model Training**
+   - **Base Classification**: Evaluates RandomForest and XGBoost on `TARGET_CLASS` using GridSearch + TimeSeriesSplit. Selects the best by AUC.
+   - **Meta-Feature Creation**: Stacks probability outputs from all classifiers alongside the original features.
+   - **Regression Ranking Layer**: Evaluates Ridge, XGBRegressor, and RandomForestRegressor on the augmented dataset against `TARGET_RETURN`.
+   - **Evaluation**: Ranks test set stocks based on regressor predictions, selects the Top-K (top 20%), and computes the Spearman Information Coefficient (IC) and Top-K average return lift.
 
 ---
 
@@ -94,13 +97,13 @@ The script prints the training R² and logs intermediate steps to the `logs/` fo
 
 2. **Install dependencies**.
 
-   From the project root (`Portfolio Optimization using SPO`):
+   From the project root:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-   > Note: this project uses libraries such as `yfinance`, `scikit-learn`, `xgboost`, `cvxpy`, and `PyPortfolioOpt`. Some of these may require build tools / compilers on your system.
+   > Note: This requires libraries like `xgboost`, `scikit-learn`, `yfinance`, and eventually `cvxpy` / `PyPortfolioOpt`.
 
 ---
 
@@ -109,20 +112,16 @@ The script prints the training R² and logs intermediate steps to the `logs/` fo
 From the project root, run the end‑to‑end pipeline:
 
 ```bash
-python -m src.ingestion
+python src/ingestion.py
 ```
 
 This will:
-
-- Download and store raw price data.
-- Create the engineered dataset and train/test splits.
-- Fit and save the preprocessing pipeline.
-- Train and tune candidate models, pick the best one, and save it to `models/model.pkl`.
-
-After this completes, you can load the saved preprocessor and model (via `utils.load_object`) to:
-
-- Generate return forecasts on new data.
-- Feed predicted returns into portfolio‑construction / optimization logic using `cvxpy` or `PyPortfolioOpt`.
+- Create required directories (`data/raw data/`, `models/`, `logs/`).
+- Download data, build features, and split the data.
+- Fit and save the scaler/imputer.
+- Train the stacked classification-regression architecture.
+- Print model performance (AUC for classifiers, Spearman IC and Top-K return for regressors).
+- Save the final models to the `models/` directory.
 
 ---
 
@@ -130,14 +129,13 @@ After this completes, you can load the saved preprocessor and model (via `utils.
 
 Ideas for further development:
 
-- **Portfolio optimization layer**: use predicted returns and an estimated covariance matrix to generate allocations (e.g. mean‑variance optimization, risk‑parity, or custom utility).
-- **Custom universes**: allow dynamic configuration of tickers and date ranges.
-- **Backtesting**: implement a simple backtest loop that converts forecasts into positions and tracks PnL / risk metrics.
-- **Model experimentation**: add additional models (e.g. LSTMs, temporal CNNs, gradient‑boosted trees) and richer hyperparameter searches.
+- **Portfolio Optimization Layer**: Load the generated return rankings and feed them into `cvxpy` or `PyPortfolioOpt` to build mean-variance or risk-parity portfolios.
+- **Advanced Feature Engineering**: Incorporate volume data, sector-neutralize features, or add macroeconomic indicators.
+- **Deep Learning**: Introduce LSTMs or Temporal Convolutional Networks (TCNs) into the base layer.
+- **Purged Cross-Validation**: Implement Combinatorial Purged Cross-Validation (CPCV) to better handle time-series overlap in forward returns.
 
 ---
 
 ## Disclaimer
 
 This project is for **educational and research purposes only** and **does not constitute financial advice**. Past performance and model predictions are not guarantees of future returns. Always do your own research and consult a qualified professional before making investment decisions.
-
