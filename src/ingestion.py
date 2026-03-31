@@ -43,6 +43,10 @@ class DataIngestion:
             returns = close.pct_change()
             future_returns = (close.shift(-5) / close) - 1
             
+            # Continuous target for regression ranking layer
+            target_return = future_returns
+
+            # Binary target for classification base layer
             daily_top_quintile = future_returns.quantile(0.8, axis=1)
             target_class = future_returns.ge(daily_top_quintile, axis=0).astype(float)
             target_class = target_class.where(future_returns.notna(), np.nan)
@@ -78,14 +82,16 @@ class DataIngestion:
                 alpha_1d.stack(),
                 rank_mom_10.stack(),
                 anti_mom_10.stack(),
-                target_class.stack()
+                target_class.stack(),
+                target_return.stack()
             ], axis=1, keys=[
                 'RET_1D', 'RET_5D', 'RET_10D', 
                 'MOM_10', 'MOM_20', 
                 'VOL_5', 'VOL_10', 
                 'ALPHA_1D', 'RANK_MOM_10', 
                 'ANTI_MOM_10',
-                'TARGET_CLASS'
+                'TARGET_CLASS',
+                'TARGET_RETURN'
             ])
             
             dataset = dataset.reset_index()

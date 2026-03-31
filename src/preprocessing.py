@@ -49,7 +49,7 @@ class DataTransformation:
 
             preprocessor = self.get_data_transformer_object()
 
-            target_columns = ["TARGET_CLASS"]
+            target_columns = ["TARGET_CLASS", "TARGET_RETURN"]
             drop_columns = ["Date", "Ticker"]
 
             input_feature_train_df = train_df.drop(columns=target_columns + drop_columns,axis=1)
@@ -60,11 +60,12 @@ class DataTransformation:
             input_feature_train_arr = preprocessor.fit_transform(input_feature_train_df)
             input_feature_test_arr = preprocessor.transform(input_feature_test_df)
 
-            target_feature_train_arr = train_df[target_columns]
-            target_feature_test_arr = test_df[target_columns]
+            # Stack targets: [...features, TARGET_CLASS, TARGET_RETURN]
+            target_feature_train_arr = train_df[target_columns].values
+            target_feature_test_arr = test_df[target_columns].values
 
-            train_arr = np.concatenate((input_feature_train_arr,np.array(target_feature_train_arr)),axis=1)
-            test_arr = np.concatenate((input_feature_test_arr,np.array(target_feature_test_arr)),axis=1)
+            train_arr = np.concatenate((input_feature_train_arr, target_feature_train_arr), axis=1)
+            test_arr = np.concatenate((input_feature_test_arr, target_feature_test_arr), axis=1)
 
             logging.info(f"Saving preprocessing object")
 
