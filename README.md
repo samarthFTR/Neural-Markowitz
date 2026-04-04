@@ -29,6 +29,14 @@ This project builds an end‑to‑end pipeline for **equity return forecasting a
     - **Stage 3**: Trains and tunes regressors (Ridge, XGBRegressor, RandomForestRegressor) on augmented features.
     - **Stage 4**: Evaluates ranking performance using Spearman IC and Top-K portfolio return.
     - Saves individual models and the stacked ensemble to `models/`.
+  - **`spo/`** *(NEW — Smart Predict-then-Optimize Layer)*:
+    - **`prediction_net.py`**: PyTorch neural network for cross-sectional return prediction (shared-weight MLP).
+    - **`portfolio_layer.py`**: Differentiable Markowitz mean-variance optimizer with custom autograd backward pass (implicit KKT differentiation).
+    - **`spo_loss.py`**: SPO+ surrogate loss (Elmachtoub & Grigas, 2021), decision regret metric, and hybrid MSE+SPO+ loss.
+    - **`covariance.py`**: Rolling covariance estimation with Ledoit-Wolf shrinkage.
+    - **`trainer.py`**: End-to-end SPO training pipeline with three modes (`spo+`, `mse`, `hybrid`) and a comparison runner.
+    - **`evaluation.py`**: Walk-forward portfolio backtester with financial metrics (Sharpe, drawdown, turnover, decision regret).
+  - **`utils/datasets.py`**: PyTorch `Dataset` for cross-sectional portfolio data (one sample = one trading day of all stocks).
   - **`utils/utils.py`**: Helper functions for saving and loading Python objects.
   - **`utils/logger.py`**: Basic logging configuration writing to `logs/`.
   - **`utils/exception.py`**: Custom exception class for rich error tracing.
@@ -41,6 +49,7 @@ This project builds an end‑to‑end pipeline for **equity return forecasting a
   - **`classifier.pkl`**: Best performing base classifier.
   - **`regressor.pkl`**: Best performing ranking regressor.
   - **`model.pkl`**: Full stacked model dictionary containing all reports and best estimators.
+  - **`spo/`**: SPO-trained prediction networks and backtest results per training mode.
 - **`logs/`**
   - Timestamped log folders created at runtime.
 - **`requirements.txt`**: Python dependencies.
@@ -123,16 +132,41 @@ This will:
 - Print model performance (AUC for classifiers, Spearman IC and Top-K return for regressors).
 - Save the final models to the `models/` directory.
 
+### SPO Layer (Decision-Focused Learning)
+
+After running `ingestion.py` at least once (to generate train/test CSVs and raw prices), run the SPO pipeline:
+
+```bash
+# Train with SPO+ loss (decision-focused)
+python src/spo/trainer.py --mode spo+ --epochs 50
+
+# Train with MSE loss (prediction-focused baseline)
+python src/spo/trainer.py --mode mse --epochs 50
+
+# Train with hybrid loss (blended)
+python src/spo/trainer.py --mode hybrid --epochs 50
+
+# Run all three and print a side-by-side comparison
+python src/spo/trainer.py --mode compare
+```
+
+Additional options:
+```bash
+python src/spo/trainer.py --mode spo+ --epochs 30 --lr 0.001 --gamma 0.5 --max-weight 0.10 --hidden 64 32
+```
+
 ---
 
 ## Extending the Project
 
 Ideas for further development:
 
-- **Portfolio Optimization Layer**: Load the generated return rankings and feed them into `cvxpy` or `PyPortfolioOpt` to build mean-variance or risk-parity portfolios.
+- ~~**Portfolio Optimization Layer**~~: ✅ Implemented via the SPO module using differentiable Markowitz optimization.
 - **Advanced Feature Engineering**: Incorporate volume data, sector-neutralize features, or add macroeconomic indicators.
-- **Deep Learning**: Introduce LSTMs or Temporal Convolutional Networks (TCNs) into the base layer.
+- **Deep Learning**: Introduce LSTMs or Temporal Convolutional Networks (TCNs) into the prediction network.
 - **Purged Cross-Validation**: Implement Combinatorial Purged Cross-Validation (CPCV) to better handle time-series overlap in forward returns.
+- **Transaction Costs**: Add explicit turnover penalty `λ‖w_t − w_{t−1}‖₁` to the Markowitz objective.
+- **Risk Parity / Black-Litterman**: Swap the Markowitz layer for alternative portfolio construction methods.
 
 ---
 
