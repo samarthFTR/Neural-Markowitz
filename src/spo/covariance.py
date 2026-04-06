@@ -54,7 +54,7 @@ def compute_rolling_covariance(
     )
 
     for i in range(window, len(dates)):
-        date_str = str(dates[i])
+        date_str = str(dates[i])[:10]  # normalise to YYYY-MM-DD
         window_returns = returns.iloc[i - window : i].dropna(axis=0, how="any")
 
         if len(window_returns) < min_periods:
