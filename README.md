@@ -1,175 +1,317 @@
-## Portfolio Optimization using Statistical & ML Models
+# Portfolio Optimization using Smart Predict-then-Optimize (SPO)
 
-This project builds an end‑to‑end pipeline for **equity return forecasting and stock ranking** as a core building block for portfolio optimization. It uses a **stacked Machine Learning architecture** combining classification and regression models.
+> **End-to-end decision-focused learning for equity portfolio construction** — combining cross-sectional return prediction with differentiable convex optimization to directly minimise portfolio decision regret.
 
-- **Downloads historical prices** for a diverse universe of 40+ large‑cap U.S. stocks across different sectors using `yfinance`.
-- **Engineers alpha features** such as momentum, volatility, relative strength, rank features, and explicit mean-reversion signals.
-- **Builds a supervised learning dataset** with dual targets:
-  - `TARGET_CLASS`: A binary indicator for stocks in the daily top quintile of returns.
-  - `TARGET_RETURN`: The continuous forward 5-day return.
-- **Scales and preprocesses** data natively in long-format using `scikit-learn` transformers.
-- **Trains a Stacked Model Architecture**:
-  - **Base Layer (Classification)**: Predicts the probability of a stock being in the top quintile.
-  - **Meta-Feature Building**: Uses classifier probabilities as new features.
-  - **Top Layer (Regression)**: Predicts continuous returns using original features plus classifier probabilities to correctly rank stocks.
-- **Evaluates with Quant Metrics**: Evaluates models using Spearman Rank Correlation (IC) and Top-K portfolio lift.
-- **Persists artifacts** (preprocessor and the full stacked model) to disk for later use in downstream portfolio‑construction.
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" />
+  <img src="https://img.shields.io/badge/CVXPY-Convex_Optimization-0077B5?style=flat-square" />
+  <img src="https://img.shields.io/badge/scikit--learn-ML_Pipeline-F7931E?style=flat-square&logo=scikit-learn&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" />
+</p>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [SPO Results](#spo-results)
+- [Project Structure](#project-structure)
+- [Data & Features](#data--features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [How It Works](#how-it-works)
+- [Extending the Project](#extending-the-project)
+- [References](#references)
+- [Disclaimer](#disclaimer)
+
+---
+
+## Overview
+
+Traditional quantitative pipelines follow a **two-stage** approach: first predict returns, then construct a portfolio — optimising each stage independently. This project implements the **Smart Predict-then-Optimize (SPO)** framework, which collapses both stages into a single differentiable pipeline, training the prediction model to produce forecasts whose *downstream portfolio decisions* have minimal regret.
+
+The project includes two complementary pipelines:
+
+| Pipeline | Approach | Objective |
+|----------|----------|-----------|
+| **Stacked ML** | Classification → Regression (XGBoost, Ridge, RF) | Minimise prediction error (MSE, AUC) |
+| **SPO Layer** | Neural Network → Differentiable Markowitz Optimizer | Minimise portfolio decision regret |
+
+Both pipelines share the same data ingestion and feature engineering foundation, enabling direct comparison between prediction-focused and decision-focused learning.
+
+---
+
+## Architecture
+
+```
+                              ┌──────────────────────────────────────────┐
+                              │        DATA INGESTION (ingestion.py)     │
+                              │  yfinance → Feature Engineering → Split  │
+                              └──────────────┬───────────────────────────┘
+                                             │
+                        ┌────────────────────┴────────────────────┐
+                        ▼                                         ▼
+          ┌──────────────────────────┐            ┌───────────────────────────────┐
+          │   STACKED ML PIPELINE    │            │       SPO PIPELINE            │
+          │                          │            │                               │
+          │  ┌────────────────────┐  │            │  ┌─────────────────────────┐  │
+          │  │ Stage 1: Classify  │  │            │  │ ReturnPredictionNet     │  │
+          │  │ (RF, XGBoost)      │  │            │  │ (Shared-weight MLP)     │  │
+          │  └────────┬───────────┘  │            │  └───────────┬─────────────┘  │
+          │           │ probabilities│            │              │ μ̂ (predicted)  │
+          │  ┌────────▼───────────┐  │            │  ┌───────────▼─────────────┐  │
+          │  │ Stage 2: Regress   │  │            │  │ Differentiable          │  │
+          │  │ (Ridge, XGB, RF)   │  │            │  │ Markowitz Optimizer     │  │
+          │  └────────┬───────────┘  │            │  │ (CVXPY + KKT Backward) │  │
+          │           │ rankings     │            │  └───────────┬─────────────┘  │
+          │  ┌────────▼───────────┐  │            │              │ w* (weights)   │
+          │  │ Top-K Selection    │  │            │  ┌───────────▼─────────────┐  │
+          │  │ Spearman IC eval   │  │            │  │ SPO+ Loss / MSE Loss   │  │
+          │  └────────────────────┘  │            │  │ (Elmachtoub & Grigas)   │  │
+          │                          │            │  └─────────────────────────┘  │
+          └──────────────────────────┘            └───────────────────────────────┘
+```
+
+---
+
+## SPO Results
+
+Comparison of three training modes on the out-of-sample test set (497 days, 64 assets):
+
+| Metric | MSE | SPO+ | Hybrid (λ=0.5) |
+|--------|:---:|:----:|:---------------:|
+| **Sharpe Ratio** | 0.77 | **0.99** | 0.88 |
+| **Annualised Return** | +8.5% | **+16.6%** | +12.8% |
+| **Cumulative Return** | +117.8% | **+345.8%** | +217.3% |
+| **Decision Regret** | 0.0588 | **0.0572** | 0.0580 |
+| Annualised Volatility | 0.111 | 0.167 | 0.145 |
+| Max Drawdown | 0.515 | 0.588 | 0.518 |
+| Avg Turnover | 0.107 | 0.506 | 0.592 |
+| IC Hit Rate | 0.0% | 44.9% | 43.9% |
+
+**Key takeaway:** SPO+ delivers a **29% higher Sharpe ratio** and **3× cumulative returns** compared to MSE, confirming that optimising for downstream decision quality outperforms optimising for prediction accuracy alone.
+
+> **Note:** All three modes underperform the equal-weight benchmark (Sharpe 1.51) because the test period (2024–2026) features a strong bull market where concentration in predicted winners carries higher volatility.
 
 ---
 
 ## Project Structure
 
-- **`src/`**
-  - **`ingestion.py`**: Downloads OHLC data for the stock universe, engineers features and dual targets, melts data into a long format, creates the main `portfolio_dataset.csv`, and performs a time-aware train/test split.
-  - **`preprocessing.py`**: Defines `DataTransformation`, which builds a `ColumnTransformer` for numerical features, fits it on the training set, transforms data, stacks both targets back into the output arrays, and saves the preprocessor to `data/processor.pkl`.
-  - **`training.py`**: Defines `ModelTraining`, which executes the stacked pipeline:
-    - Splits arrays into features, `TARGET_CLASS`, and `TARGET_RETURN`.
-    - **Stage 1**: Trains and tunes classifiers (RandomForest, XGBoost) using `TimeSeriesSplit`.
-    - **Stage 2**: Generates out-of-fold probability predictions as meta-features.
-    - **Stage 3**: Trains and tunes regressors (Ridge, XGBRegressor, RandomForestRegressor) on augmented features.
-    - **Stage 4**: Evaluates ranking performance using Spearman IC and Top-K portfolio return.
-    - Saves individual models and the stacked ensemble to `models/`.
-  - **`spo/`** *(NEW — Smart Predict-then-Optimize Layer)*:
-    - **`prediction_net.py`**: PyTorch neural network for cross-sectional return prediction (shared-weight MLP).
-    - **`portfolio_layer.py`**: Differentiable Markowitz mean-variance optimizer with custom autograd backward pass (implicit KKT differentiation).
-    - **`spo_loss.py`**: SPO+ surrogate loss (Elmachtoub & Grigas, 2021), decision regret metric, and hybrid MSE+SPO+ loss.
-    - **`covariance.py`**: Rolling covariance estimation with Ledoit-Wolf shrinkage.
-    - **`trainer.py`**: End-to-end SPO training pipeline with three modes (`spo+`, `mse`, `hybrid`) and a comparison runner.
-    - **`evaluation.py`**: Walk-forward portfolio backtester with financial metrics (Sharpe, drawdown, turnover, decision regret).
-  - **`utils/datasets.py`**: PyTorch `Dataset` for cross-sectional portfolio data (one sample = one trading day of all stocks).
-  - **`utils/utils.py`**: Helper functions for saving and loading Python objects.
-  - **`utils/logger.py`**: Basic logging configuration writing to `logs/`.
-  - **`utils/exception.py`**: Custom exception class for rich error tracing.
-- **`data/`**
-  - **`raw data/raw.csv`**: Raw close prices downloaded from `yfinance`.
-  - **`portfolio_dataset.csv`**: Engineered feature + target dataset in long format.
-  - **`train.csv`, `test.csv`**: Train / test splits (split chronologically).
-  - **`processor.pkl`**: Persisted preprocessing pipeline.
-- **`models/`**
-  - **`classifier.pkl`**: Best performing base classifier.
-  - **`regressor.pkl`**: Best performing ranking regressor.
-  - **`model.pkl`**: Full stacked model dictionary containing all reports and best estimators.
-  - **`spo/`**: SPO-trained prediction networks and backtest results per training mode.
-- **`logs/`**
-  - Timestamped log folders created at runtime.
-- **`requirements.txt`**: Python dependencies.
+```
+Portfolio-Optimization-using-SPO/
+├── src/
+│   ├── ingestion.py                 # Data download, feature engineering, train/test split
+│   ├── preprocessing.py             # ColumnTransformer pipeline (Imputer + Scaler)
+│   ├── training.py                  # Stacked ML pipeline (classifiers → regressors)
+│   ├── spo/                         # ── Smart Predict-then-Optimize Module ──
+│   │   ├── prediction_net.py        #    Cross-sectional MLP (shared weights)
+│   │   ├── portfolio_layer.py       #    Differentiable Markowitz (custom autograd)
+│   │   ├── spo_loss.py              #    SPO+ loss, decision regret, hybrid loss
+│   │   ├── covariance.py            #    Rolling Ledoit-Wolf covariance estimation
+│   │   ├── trainer.py               #    End-to-end training loop (3 modes)
+│   │   └── evaluation.py            #    Walk-forward backtester & financial metrics
+│   └── utils/
+│       ├── datasets.py              #    PyTorch Dataset (cross-sectional samples)
+│       ├── logger.py                #    Logging configuration
+│       ├── utils.py                 #    Object serialisation helpers
+│       └── exception.py             #    Custom exception with traceback
+├── data/
+│   ├── raw data/raw.csv             # Raw close prices (yfinance)
+│   ├── portfolio_dataset.csv        # Engineered features + targets (long format)
+│   ├── train.csv                    # Chronological training split (75%)
+│   ├── test.csv                     # Chronological test split (25%)
+│   └── processor.pkl                # Fitted preprocessing pipeline
+├── models/
+│   ├── classifier.pkl               # Best base classifier
+│   ├── regressor.pkl                # Best ranking regressor
+│   ├── model.pkl                    # Full stacked model ensemble
+│   └── spo/                         # SPO-trained networks & backtest results
+│       ├── pred_net_mse.pt          #    MSE-trained weights
+│       ├── pred_net_spo+.pt         #    SPO+-trained weights
+│       ├── pred_net_hybrid.pt       #    Hybrid-trained weights
+│       └── results_*.pkl            #    Full backtest results per mode
+├── logs/                            # Runtime logs
+├── notebooks/                       # Exploratory analysis
+└── requirements.txt
+```
 
 ---
 
 ## Data & Features
 
-The pipeline uses a diversified universe of large-cap stocks across sectors (e.g., AAPL, MSFT, JPM, WMT, XOM, JNJ, etc.).
+**Universe:** 64 large-cap U.S. equities across sectors — Technology, Financials, Healthcare, Consumer, Industrials, and Energy.
 
-Using daily close prices from `2018-01-01` to `2026-01-01`, it computes:
+**Period:** Daily close prices from `2018-01-01` to `2026-01-01` (~2,000 trading days).
 
-- **Base Alpha Features**: 1D, 5D, 10D returns.
-- **Momentum**: 10-day and 20-day momentum.
-- **Volatility**: 5-day and 10-day rolling standard deviations.
-- **Relative Strength**: Stock return minus cross-sectional mean return (`ALPHA_1D`).
-- **Rank & Regime Features**: Cross-sectional momentum rank (`RANK_MOM_10`) and anti-momentum (modeling short-term mean reversion).
-- **Dual Targets**:
-  - `TARGET_RETURN`: Forward 5-day return (`shift(-5)`).
-  - `TARGET_CLASS`: 1 if forward return is in the top 20% cross-sectionally for that day, else 0.
+**Engineered Features (10):**
 
-The dataset is reshaped into a **long format** (`Date`, `Ticker`, `Features...`) ensuring that cross-sectional operations are handled correctly.
+| Feature | Description |
+|---------|-------------|
+| `RET_1D`, `RET_5D`, `RET_10D` | Short-horizon return signals |
+| `MOM_10`, `MOM_20` | Medium-term momentum |
+| `VOL_5`, `VOL_10` | Rolling realised volatility |
+| `ALPHA_1D` | Relative strength (stock return − cross-sectional mean) |
+| `RANK_MOM_10` | Cross-sectional momentum rank |
+| `ANTI_MOM_10` | Short-term mean-reversion signal |
 
----
+**Dual Targets:**
 
-## Model Training Workflow
+| Target | Type | Definition |
+|--------|------|------------|
+| `TARGET_RETURN` | Continuous | Forward 5-day return |
+| `TARGET_CLASS` | Binary | 1 if return is in the daily top quintile (top 20%), else 0 |
 
-End‑to‑end training is driven by executing `src/ingestion.py`:
-
-1. **Data Ingestion**
-   - Downloads prices via `yfinance`.
-   - Computes features, generates targets, and builds the long-format dataset.
-   - Performs a chronological 75/25 split to prevent lookahead bias.
-2. **Preprocessing**
-   - Fits a pipeline (`SimpleImputer` + `StandardScaler` (passed through)) on training features.
-   - Outputs Numpy arrays containing `[...features, TARGET_CLASS, TARGET_RETURN]`.
-3. **Stacked Model Training**
-   - **Base Classification**: Evaluates RandomForest and XGBoost on `TARGET_CLASS` using GridSearch + TimeSeriesSplit. Selects the best by AUC.
-   - **Meta-Feature Creation**: Stacks probability outputs from all classifiers alongside the original features.
-   - **Regression Ranking Layer**: Evaluates Ridge, XGBRegressor, and RandomForestRegressor on the augmented dataset against `TARGET_RETURN`.
-   - **Evaluation**: Ranks test set stocks based on regressor predictions, selects the Top-K (top 20%), and computes the Spearman Information Coefficient (IC) and Top-K average return lift.
+All features are computed in **long format** (`Date × Ticker`) to ensure correct cross-sectional operations and avoid lookahead bias.
 
 ---
 
 ## Installation
 
-1. **Create and activate a virtual environment** (recommended).
+### Prerequisites
 
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate  # on Windows
-   # source .venv/bin/activate  # on macOS / Linux
-   ```
+- Python 3.10+
+- pip
 
-2. **Install dependencies**.
+### Setup
 
-   From the project root:
+```bash
+# 1. Clone the repository
+git clone https://github.com/samarthFTR/Portfolio-Optimization-using-SPO.git
+cd Portfolio-Optimization-using-SPO
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 2. Create and activate a virtual environment
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # macOS / Linux
 
-   > Note: This requires libraries like `xgboost`, `scikit-learn`, `yfinance`, and eventually `cvxpy` / `PyPortfolioOpt`.
+# 3. Install dependencies
+pip install -r requirements.txt
+```
 
 ---
 
 ## Usage
 
-From the project root, run the end‑to‑end pipeline:
+### 1. Data Ingestion & Stacked ML Pipeline
+
+Run the full traditional pipeline (downloads data, engineers features, trains stacked models):
 
 ```bash
 python src/ingestion.py
 ```
 
 This will:
-- Create required directories (`data/raw data/`, `models/`, `logs/`).
-- Download data, build features, and split the data.
-- Fit and save the scaler/imputer.
-- Train the stacked classification-regression architecture.
-- Print model performance (AUC for classifiers, Spearman IC and Top-K return for regressors).
-- Save the final models to the `models/` directory.
+- Download historical prices via `yfinance`
+- Compute alpha features and dual targets
+- Perform a chronological 75/25 train-test split
+- Fit the preprocessing pipeline (`SimpleImputer` + `StandardScaler`)
+- Train and evaluate the stacked classification → regression architecture
+- Save all models and artifacts to `models/`
 
-### SPO Layer (Decision-Focused Learning)
+### 2. SPO Pipeline (Decision-Focused Learning)
 
-After running `ingestion.py` at least once (to generate train/test CSVs and raw prices), run the SPO pipeline:
+> **Prerequisite:** Run `ingestion.py` at least once to generate `train.csv`, `test.csv`, and `raw.csv`.
+
+Train with a specific loss function:
 
 ```bash
-# Train with SPO+ loss (decision-focused)
+# SPO+ loss — decision-focused (recommended)
 python src/spo/trainer.py --mode spo+ --epochs 50
 
-# Train with MSE loss (prediction-focused baseline)
+# MSE loss — prediction-focused baseline
 python src/spo/trainer.py --mode mse --epochs 50
 
-# Train with hybrid loss (blended)
+# Hybrid loss — blended (λ·SPO+ + (1−λ)·MSE)
 python src/spo/trainer.py --mode hybrid --epochs 50
+```
 
-# Run all three and print a side-by-side comparison
+Run a head-to-head comparison of all three modes:
+
+```bash
 python src/spo/trainer.py --mode compare
 ```
 
-Additional options:
+Full configuration options:
+
 ```bash
-python src/spo/trainer.py --mode spo+ --epochs 30 --lr 0.001 --gamma 0.5 --max-weight 0.10 --hidden 64 32
+python src/spo/trainer.py \
+  --mode spo+ \
+  --epochs 30 \
+  --lr 0.001 \
+  --gamma 0.5 \
+  --max-weight 0.10 \
+  --hidden 64 32
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--mode` | `spo+` | Training mode: `spo+`, `mse`, `hybrid`, or `compare` |
+| `--epochs` | `50` | Maximum training epochs |
+| `--lr` | `0.001` | Learning rate |
+| `--gamma` | `0.5` | Risk-aversion parameter (γ) in Markowitz objective |
+| `--max-weight` | `0.10` | Maximum allocation per asset (concentration limit) |
+| `--hidden` | `64 32` | Hidden layer dimensions for the prediction network |
+
+---
+
+## How It Works
+
+### Stacked ML Pipeline
+
+```
+1. Base Classification    →  P(stock ∈ top quintile)  →  RandomForest / XGBoost
+2. Meta-Feature Stacking  →  Append classifier probabilities to feature set
+3. Regression Ranking     →  Predict continuous returns  →  Ridge / XGB / RF
+4. Evaluation             →  Spearman IC · Top-K portfolio lift
+```
+
+### SPO Layer — Differentiable Predict-then-Optimize
+
+The SPO module implements an end-to-end differentiable pipeline:
+
+1. **Predict:** A shared-weight MLP scores each stock's expected return:
+   $$\hat{\mu} = f_\theta(X_t) \in \mathbb{R}^N$$
+
+2. **Optimize:** A differentiable Markowitz optimizer solves the QP:
+   $$w^*(\hat{\mu}) = \arg\min_w \left[ -\hat{\mu}^\top w + \gamma \cdot w^\top \Sigma_t w \right] \quad \text{s.t.} \quad \mathbf{1}^\top w = 1,\ w \geq 0,\ w \leq w_{\max}$$
+
+3. **Loss (SPO+):** The SPO+ surrogate loss (Elmachtoub & Grigas, 2021) provides a convex upper bound on true decision regret:
+   $$\mathcal{L}_{\text{SPO+}}(\hat{\mu}, \mu) = \text{obj}\!\left(w^*(2\hat{\mu} - \mu),\ \mu\right) - \text{obj}\!\left(w^*(\hat{\mu}),\ \mu\right)$$
+
+4. **Backward:** Gradients flow through the optimizer via implicit differentiation of the KKT conditions (active-set method on the QP's augmented system).
+
+**Why this matters:**  MSE-trained models minimise prediction error but have no incentive to rank stocks correctly for portfolio construction. SPO+ directly optimises the quality of the downstream portfolio decision, producing predictions that may be less accurate but lead to better investment outcomes.
 
 ---
 
 ## Extending the Project
 
-Ideas for further development:
+| Idea | Description |
+|------|-------------|
+| ~~Portfolio Optimization Layer~~ | ✅ Implemented via differentiable Markowitz |
+| **Transaction Cost Penalty** | Add turnover regularisation `λ‖wₜ − wₜ₋₁‖₁` to the QP |
+| **Advanced Features** | Volume signals, sector-neutral features, macro indicators |
+| **Temporal Models** | Replace MLP with LSTM / Temporal Convolutional Network |
+| **Purged CV** | Combinatorial Purged Cross-Validation for overlapping targets |
+| **Risk Parity / BL** | Swap Markowitz for alternative portfolio construction |
+| **Multi-Period Optimisation** | Extend to dynamic rebalancing with lookahead |
 
-- ~~**Portfolio Optimization Layer**~~: ✅ Implemented via the SPO module using differentiable Markowitz optimization.
-- **Advanced Feature Engineering**: Incorporate volume data, sector-neutralize features, or add macroeconomic indicators.
-- **Deep Learning**: Introduce LSTMs or Temporal Convolutional Networks (TCNs) into the prediction network.
-- **Purged Cross-Validation**: Implement Combinatorial Purged Cross-Validation (CPCV) to better handle time-series overlap in forward returns.
-- **Transaction Costs**: Add explicit turnover penalty `λ‖w_t − w_{t−1}‖₁` to the Markowitz objective.
-- **Risk Parity / Black-Litterman**: Swap the Markowitz layer for alternative portfolio construction methods.
+---
+
+## References
+
+1. Elmachtoub, A. N., & Grigas, P. (2021). **Smart "Predict, then Optimize."** *Management Science*, 68(1), 9–26. [doi:10.1287/mnsc.2020.3922](https://doi.org/10.1287/mnsc.2020.3922)
+
+2. Markowitz, H. (1952). **Portfolio Selection.** *The Journal of Finance*, 7(1), 77–91.
+
+3. Ledoit, O., & Wolf, M. (2004). **A well-conditioned estimator for large-dimensional covariance matrices.** *Journal of Multivariate Analysis*, 88(2), 365–411.
+
+4. Amos, B., & Kolter, J. Z. (2017). **OptNet: Differentiable Optimization as a Layer in Neural Networks.** *ICML 2017*.
 
 ---
 
 ## Disclaimer
 
-This project is for **educational and research purposes only** and **does not constitute financial advice**. Past performance and model predictions are not guarantees of future returns. Always do your own research and consult a qualified professional before making investment decisions.
+This project is for **educational and research purposes only** and does not constitute financial advice. Past performance and model predictions are not guarantees of future returns. Always do your own research and consult a qualified professional before making investment decisions.
