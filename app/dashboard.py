@@ -67,7 +67,6 @@ SECTOR_COLORS = {
     "Energy/Ind.": "#E06C6C",
 }
 
-
 # =====================================================================
 #  Data & model loading
 # =====================================================================
@@ -301,6 +300,15 @@ def main():
     sel_indices = [ticker_to_idx[t] for t in selected_tickers]
     predicted_returns = full_preds[sel_indices]
 
+    # ── Cross-sectional z-score & rank of predictions ──
+    # NOTE: SPO+ model outputs near-constant absolute values (~-19%) because
+    # only the cross-sectional ranking matters for portfolio weights, not the
+    # absolute magnitude. We display z-scores and ranks instead of raw values.
+    pred_mean = predicted_returns.mean()
+    pred_std  = predicted_returns.std() + 1e-9
+    pred_zscore = (predicted_returns - pred_mean) / pred_std          # cross-sectional z-score
+    pred_rank   = pd.Series(predicted_returns).rank(ascending=True).values  # 1 = weakest signal
+
     # ── Optimize for the user's selected universe ──
     n_assets = len(selected_tickers)
     port_layer = DifferentiableMarkowitz(n_assets=n_assets, gamma=gamma, max_weight=max_weight)
@@ -315,18 +323,25 @@ def main():
         "Ticker": selected_tickers,
         "Sector": [SECTOR_MAP.get(t, "Other") for t in selected_tickers],
         "Weight": weights,
-        "Predicted Return": predicted_returns,
+        "Signal (z-score)": pred_zscore,
+        "Rank": pred_rank.astype(int),
+        "_raw_pred": predicted_returns,   # kept for optimizer, hidden from display
     }).sort_values("Weight", ascending=False).reset_index(drop=True)
 
     # ── Portfolio-level stats ──
-    port_expected_return = float(np.dot(weights, predicted_returns))
-    port_variance = float(weights @ cov_matrix @ weights)
-    port_vol = float(np.sqrt(port_variance))
+    # Use historical mean/vol from the covariance window for a meaningful Sharpe estimate
+    hist_ret_col = window_returns  # shape (window, n_assets)
+    hist_port_ret = (hist_ret_col * weights).sum(axis=1)   # portfolio daily returns
     ann_factor = np.sqrt(252 / 5)
-    port_sharpe_est = (port_expected_return / port_vol * ann_factor) if port_vol > 0 else 0.0
+    hist_mean = float(hist_port_ret.mean())
+    hist_vol  = float(hist_port_ret.std())
+    port_sharpe_est = (hist_mean / hist_vol * np.sqrt(252)) if hist_vol > 0 else 0.0
+
+    port_variance = float(weights @ cov_matrix @ weights)
+    port_vol = float(np.sqrt(port_variance))   # 5-day std dev from Ledoit-Wolf
     active_positions = int((weights > 0.001).sum())
-    hhi = float(np.sum(weights ** 2))
     top5_concentration = float(np.sort(weights)[-min(5, n_assets):].sum())
+    top_signal_ticker = portfolio_df.iloc[0]["Ticker"] if len(portfolio_df) > 0 else ""
 
     # ── Actual (forward) return if available ──
     if loc + 5 < len(prices):
@@ -334,6 +349,7 @@ def main():
         actual_port_return = float(np.dot(weights, actual_5d_returns))
         has_actual = True
     else:
+        actual_5d_returns = None
         actual_port_return = None
         has_actual = False
 
@@ -351,19 +367,19 @@ def main():
         # KPI row
         cols = st.columns(6)
         kpi_data = [
-            ("Expected Return", f"{port_expected_return*100:+.3f}%", f"5-day forecast"),
-            ("Portfolio Risk", f"{port_vol*100:.3f}%", f"5-day std dev"),
-            ("Est. Sharpe", f"{port_sharpe_est:.2f}", "Annualised"),
-            ("Active Positions", f"{active_positions}", f"of {n_assets} total"),
-            ("Top-5 Weight", f"{top5_concentration:.1%}", "Concentration"),
-            ("Realised Return" if has_actual else "Realised Return",
+            ("Realised 5D Return",
              f"{actual_port_return*100:+.3f}%" if has_actual else "N/A",
-             f"Actual 5-day" if has_actual else "Future date"),
+             "Actual portfolio return" if has_actual else "Future date — not yet available"),
+            ("Portfolio Risk", f"{port_vol*100:.3f}%", "5-day std dev (Ledoit-Wolf)"),
+            ("Est. Sharpe", f"{port_sharpe_est:.2f}", "Historical 60d annualised"),
+            ("Active Positions", f"{active_positions}", f"of {n_assets} assets selected"),
+            ("Top-5 Weight", f"{top5_concentration:.1%}", "Concentration"),
+            ("Top Signal", top_signal_ticker, "Highest-ranked holding"),
         ]
         for i, (label, val, sub) in enumerate(kpi_data):
             with cols[i]:
                 color = ""
-                if "Return" in label and val != "N/A":
+                if label == "Realised 5D Return" and val != "N/A":
                     color = f"color:{'#6CCE6C' if '+' in val else '#E06C6C'}"
                 st.markdown(f'<div class="kpi"><div class="label">{label}</div><div class="val" style="{color}">{val}</div><div class="sub">{sub}</div></div>', unsafe_allow_html=True)
 
@@ -408,9 +424,12 @@ def main():
 
         # ── Detailed holdings table ──
         st.markdown("#### Holdings Detail")
+        st.caption("Signal z-score = cross-sectional standardised model score. Rank = position in universe (higher = stronger buy signal).")
         display_df = portfolio_df[portfolio_df["Weight"] > 0.0005].copy()
         display_df["Weight"] = display_df["Weight"].apply(lambda x: f"{x:.2%}")
-        display_df["Predicted Return"] = display_df["Predicted Return"].apply(lambda x: f"{x*100:+.4f}%")
+        display_df["Signal (z-score)"] = display_df["Signal (z-score)"].apply(lambda x: f"{x:+.3f}")
+        display_df["Rank"] = display_df["Rank"].apply(lambda x: f"{int(x)} / {n_assets}")
+        display_df = display_df.drop(columns=["_raw_pred"])
         if has_actual:
             actual_map = dict(zip(selected_tickers, actual_5d_returns))
             display_df["Actual 5D Return"] = display_df["Ticker"].map(actual_map).apply(lambda x: f"{x*100:+.3f}%" if pd.notna(x) else "")
@@ -424,12 +443,12 @@ def main():
         c1, c2 = st.columns(2)
 
         with c1:
-            # Predicted return vs weight scatter
+            # Signal z-score vs weight scatter
             fig_scatter = go.Figure()
             for sector in portfolio_df["Sector"].unique():
                 sec = portfolio_df[portfolio_df["Sector"] == sector]
                 fig_scatter.add_trace(go.Scatter(
-                    x=sec["Predicted Return"] * 100, y=sec["Weight"] * 100,
+                    x=sec["Signal (z-score)"], y=sec["Weight"] * 100,
                     mode="markers+text",
                     text=sec["Ticker"],
                     textposition="top center",
@@ -437,9 +456,10 @@ def main():
                     marker=dict(size=10, color=SECTOR_COLORS.get(sector, "#808080"),
                                 line=dict(width=1, color="#fff")),
                     name=sector,
-                    hovertemplate="%{text}<br>Pred: %{x:.3f}%<br>Weight: %{y:.2f}%<extra></extra>",
+                    hovertemplate="%{text}<br>Signal z-score: %{x:.3f}<br>Weight: %{y:.2f}%<extra></extra>",
                 ))
-            fig_scatter.update_xaxes(title_text="Predicted Return (%)")
+            fig_scatter.add_vline(x=0, line_dash="dot", line_color="rgba(255,255,255,0.2)")
+            fig_scatter.update_xaxes(title_text="Model Signal (cross-sectional z-score)")
             fig_scatter.update_yaxes(title_text="Portfolio Weight (%)")
             _dark_layout(fig_scatter, "Signal vs Allocation", height=420)
             st.plotly_chart(fig_scatter, use_container_width=True, key="ana_scatter")
@@ -499,17 +519,26 @@ def main():
 
         # Efficient frontier sketch
         st.markdown("#### Efficient Frontier (Monte Carlo Simulation)")
+        st.caption("Expected returns estimated from 60-day historical mean returns. Risk from Ledoit-Wolf covariance. Colour = Sharpe ratio.")
+
+        # Use historical mean returns (annualised) from the covariance window
+        hist_mean_rets = window_returns.mean().values.astype(np.float32)  # daily mean per asset
+        hist_mean_rets_ann = hist_mean_rets * 252                          # annualise
+
         n_sim = 3000
         np.random.seed(42)
         rand_w = np.random.dirichlet(np.ones(n_assets), n_sim)
-        # Clip to max weight
         for i in range(n_sim):
             rand_w[i] = np.minimum(rand_w[i], max_weight)
             rand_w[i] /= rand_w[i].sum()
 
-        sim_rets = rand_w @ predicted_returns
-        sim_vols = np.array([np.sqrt(rand_w[i] @ cov_matrix @ rand_w[i]) for i in range(n_sim)])
-        sim_sharpes = np.where(sim_vols > 0, sim_rets / sim_vols * ann_factor, 0)
+        sim_rets = rand_w @ hist_mean_rets_ann
+        cov_ann = cov_matrix * 252 / 5  # annualise from 5-day holding
+        sim_vols = np.array([np.sqrt(rand_w[i] @ cov_ann @ rand_w[i]) for i in range(n_sim)])
+        sim_sharpes = np.where(sim_vols > 0, sim_rets / sim_vols, 0)
+
+        opt_ret_ann = float(weights @ hist_mean_rets_ann)
+        opt_vol_ann = float(np.sqrt(weights @ cov_ann @ weights))
 
         fig_ef = go.Figure()
         fig_ef.add_trace(go.Scatter(
@@ -517,10 +546,10 @@ def main():
             marker=dict(size=3, color=sim_sharpes, colorscale="Viridis",
                         colorbar=dict(title="Sharpe"), opacity=0.5),
             name="Random Portfolios",
-            hovertemplate="Vol: %{x:.3f}%<br>Ret: %{y:.4f}%<br><extra></extra>",
+            hovertemplate="Vol: %{x:.2f}%<br>Return: %{y:.2f}%<br><extra></extra>",
         ))
         fig_ef.add_trace(go.Scatter(
-            x=[port_vol * 100], y=[port_expected_return * 100],
+            x=[opt_vol_ann * 100], y=[opt_ret_ann * 100],
             mode="markers+text",
             marker=dict(size=16, color=C["gold"], symbol="star",
                         line=dict(width=2, color="#fff")),
@@ -528,20 +557,19 @@ def main():
             textfont=dict(size=12, color=C["gold"]),
             name="Optimal Portfolio",
         ))
-        # Equal weight
         eq_w = np.full(n_assets, 1.0 / n_assets)
-        eq_ret = float(eq_w @ predicted_returns)
-        eq_vol = float(np.sqrt(eq_w @ cov_matrix @ eq_w))
+        eq_ret_ann = float(eq_w @ hist_mean_rets_ann)
+        eq_vol_ann = float(np.sqrt(eq_w @ cov_ann @ eq_w))
         fig_ef.add_trace(go.Scatter(
-            x=[eq_vol * 100], y=[eq_ret * 100], mode="markers+text",
+            x=[eq_vol_ann * 100], y=[eq_ret_ann * 100], mode="markers+text",
             marker=dict(size=12, color=C["muted"], symbol="diamond",
                         line=dict(width=2, color="#fff")),
             text=["Equal Wt"], textposition="bottom center",
             textfont=dict(size=11, color=C["muted"]),
             name="Equal Weight",
         ))
-        fig_ef.update_xaxes(title_text="Portfolio Risk (%)")
-        fig_ef.update_yaxes(title_text="Expected Return (%)")
+        fig_ef.update_xaxes(title_text="Annualised Volatility (%)")
+        fig_ef.update_yaxes(title_text="Annualised Return (%)")
         _dark_layout(fig_ef, height=450)
         st.plotly_chart(fig_ef, use_container_width=True, key="ana_frontier")
 
