@@ -170,30 +170,148 @@ def _dark_layout(fig, title=None, height=400):
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-html, body, [class*="st-"] { font-family: 'Inter', system-ui, sans-serif; }
+
+/* ── Base ── */
+html, body, [class*="st-"] { font-family: 'Inter', system-ui, sans-serif !important; }
 .stApp { background: #0E1117; }
-section[data-testid="stSidebar"] { background: #161B22; border-right: 1px solid #2D3139; }
+
+/* ── Sidebar ── */
+section[data-testid="stSidebar"] {
+    background: #0D1117 !important;
+    border-right: 1px solid #21262D;
+}
+section[data-testid="stSidebar"] * { color: #C9D1D9; }
+section[data-testid="stSidebar"] h2 { color: #FAFAFA !important; }
+section[data-testid="stSidebar"] hr { border-color: #21262D; margin: 12px 0; }
+section[data-testid="stSidebar"] label { color: #8B949E !important; font-size: 12px !important; }
+
+/* ── Sidebar sliders ── */
+.stSlider > div > div > div { background: #2D3139 !important; }
+.stSlider > div > div > div > div { background: #6C8EBF !important; }
+
+/* ── Multiselect chips — override the jarring default red ── */
+[data-baseweb="tag"] {
+    background-color: #1C3A5C !important;
+    border: 1px solid #3A5A8A !important;
+    border-radius: 4px !important;
+}
+[data-baseweb="tag"] span { color: #90BADF !important; font-size: 12px; }
+[data-baseweb="tag"] button svg { fill: #6C8EBF !important; }
+
+/* ── Select dropdowns ── */
+div[data-baseweb="select"] > div {
+    background: #161B22 !important;
+    border-color: #2D3139 !important;
+    color: #C9D1D9 !important;
+}
+div[data-baseweb="select"] li { background: #161B22 !important; color: #C9D1D9 !important; }
+div[data-baseweb="select"] li:hover { background: #21262D !important; }
+
+/* ── Checkbox ── */
+.stCheckbox label { color: #8B949E !important; }
+.stCheckbox [data-testid="stCheckboxWidget"] { accent-color: #6C8EBF; }
+
+/* ── Header ── */
 #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-header[data-testid="stHeader"] { background: #0E1117; border-bottom: 1px solid #2D3139; }
+header[data-testid="stHeader"] { background: #0E1117; border-bottom: 1px solid #21262D; }
 
-.hdr { padding: 20px 0 6px 0; border-bottom: 1px solid #2D3139; margin-bottom: 24px; }
-.hdr h1 { font-size: 26px; font-weight: 700; color: #FAFAFA; margin: 0; letter-spacing: -0.5px; }
-.hdr p { color: #8B949E; font-size: 13px; margin: 4px 0 0 0; }
+/* ── Page title block ── */
+.hdr { padding: 20px 0 10px 0; border-bottom: 1px solid #21262D; margin-bottom: 28px; }
+.hdr h1 { font-size: 24px; font-weight: 700; color: #FAFAFA; margin: 0; letter-spacing: -0.5px; }
+.hdr p { color: #8B949E; font-size: 13px; margin: 5px 0 0 0; }
 
-.kpi { background: #161B22; border: 1px solid #2D3139; border-radius: 10px; padding: 18px 20px; }
-.kpi .label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-.kpi .val { font-size: 22px; font-weight: 700; color: #FAFAFA; font-variant-numeric: tabular-nums; }
-.kpi .sub { font-size: 12px; color: #8B949E; margin-top: 4px; }
+/* ── KPI cards ── */
+.kpi {
+    background: #161B22;
+    border: 1px solid #21262D;
+    border-radius: 10px;
+    padding: 16px 18px;
+    min-height: 96px;
+}
+.kpi .label {
+    font-size: 10px;
+    color: #6E7681;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+.kpi .val {
+    font-size: 20px;
+    font-weight: 700;
+    color: #E6EDF3;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+.kpi .sub {
+    font-size: 11px;
+    color: #6E7681;
+    margin-top: 5px;
+    line-height: 1.4;
+}
 
-.stPlotlyChart { border: 1px solid #2D3139; border-radius: 8px; overflow: hidden; padding: 6px; background: #161B22; }
-.stDataFrame { border: 1px solid #2D3139; border-radius: 8px; overflow: hidden; }
+/* ── Charts ── */
+.stPlotlyChart {
+    border: 1px solid #21262D;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #161B22;
+}
 
-.stTabs [data-baseweb="tab-list"] { gap: 0; background: #161B22; border-radius: 8px; padding: 4px; border: 1px solid #2D3139; }
-.stTabs [data-baseweb="tab"] { height: 40px; border-radius: 6px; color: #8B949E; font-weight: 500; font-size: 13px; padding: 0 20px; background: transparent; }
-.stTabs [data-baseweb="tab"][aria-selected="true"] { background: #21262D; color: #FAFAFA; }
+/* ── Dataframe ── */
+[data-testid="stDataFrame"] {
+    border: 1px solid #21262D;
+    border-radius: 8px;
+    overflow: hidden;
+}
+[data-testid="stDataFrame"] th {
+    background: #161B22 !important;
+    color: #8B949E !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid #21262D !important;
+}
+[data-testid="stDataFrame"] td {
+    background: #0D1117 !important;
+    color: #C9D1D9 !important;
+    font-size: 13px !important;
+    border-bottom: 1px solid #161B22 !important;
+}
+[data-testid="stDataFrame"] tr:hover td { background: #161B22 !important; }
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0;
+    background: #161B22;
+    border-radius: 8px;
+    padding: 4px;
+    border: 1px solid #21262D;
+}
+.stTabs [data-baseweb="tab"] {
+    height: 38px;
+    border-radius: 6px;
+    color: #6E7681;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 0 22px;
+    background: transparent;
+    transition: all 0.15s ease;
+}
+.stTabs [data-baseweb="tab"]:hover { color: #C9D1D9; background: #1C2128; }
+.stTabs [data-baseweb="tab"][aria-selected="true"] { background: #21262D; color: #E6EDF3; }
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
 
-div[data-baseweb="select"] > div { background: #161B22; border-color: #2D3139; }
+/* ── Info / warning boxes ── */
+.stAlert { border-radius: 8px; border: 1px solid #21262D; }
+
+/* ── Section headers ── */
+h4 { color: #C9D1D9 !important; font-weight: 600; font-size: 15px !important; margin-bottom: 4px !important; }
+.stCaption { color: #6E7681 !important; font-size: 11px !important; }
+
+/* ── Spinner ── */
+.stSpinner { color: #6C8EBF !important; }
 </style>
 """
 
@@ -250,8 +368,10 @@ def main():
         st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Optimization Date</p>', unsafe_allow_html=True)
 
         available_dates = prices.index[60:]  # need 60 days for covariance
-        date_options = [d.strftime("%Y-%m-%d") for d in available_dates[-252:]]  # last year
-        opt_date_str = st.selectbox("Date", date_options, index=len(date_options)-1, key="opt_date")
+        date_options = [d.strftime("%Y-%m-%d") for d in available_dates[-252:]]
+        # Default to 10 bars before end so actual 5D forward return is always available
+        default_idx = max(0, len(date_options) - 10)
+        opt_date_str = st.selectbox("Date", date_options, index=default_idx, key="opt_date")
         opt_date = pd.Timestamp(opt_date_str)
 
         st.markdown("---")
@@ -422,17 +542,47 @@ def main():
             fig_pie.update_layout(showlegend=False)
             st.plotly_chart(fig_pie, use_container_width=True, key="opt_sector_pie")
 
+        # ── Actual returns chart (when available) ── 
+        if has_actual:
+            st.markdown("#### Realised 5-Day Returns vs Model Signal")
+            st.caption("Bars show actual 5-day return for each active holding. Colour: green = positive, red = negative. Line = portfolio average.")
+
+            active_tickers_list = portfolio_df[portfolio_df["Weight"] > 0.001]["Ticker"].tolist()
+            actual_map_full = dict(zip(selected_tickers, actual_5d_returns))
+            act_vals = [actual_map_full.get(t, 0.0) for t in active_tickers_list]
+            bar_colors = [C["green"] if v >= 0 else C["red"] for v in act_vals]
+
+            fig_act = go.Figure()
+            fig_act.add_trace(go.Bar(
+                x=active_tickers_list,
+                y=[v * 100 for v in act_vals],
+                marker_color=bar_colors,
+                name="Actual 5D Return",
+                hovertemplate="%{x}<br>Return: %{y:+.3f}%<extra></extra>",
+            ))
+            fig_act.add_hline(
+                y=actual_port_return * 100,
+                line_dash="dash", line_color=C["gold"], line_width=2,
+                annotation_text=f"Portfolio avg: {actual_port_return*100:+.3f}%",
+                annotation_font_color=C["gold"],
+            )
+            fig_act.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.2)")
+            fig_act.update_yaxes(title_text="5-Day Return (%)", tickformat="+.2f")
+            _dark_layout(fig_act, height=320)
+            st.plotly_chart(fig_act, use_container_width=True, key="opt_actual_returns")
+
         # ── Detailed holdings table ──
         st.markdown("#### Holdings Detail")
-        st.caption("Signal z-score = cross-sectional standardised model score. Rank = position in universe (higher = stronger buy signal).")
+        st.caption("Signal z-score: cross-sectional standardised model score (higher = stronger buy signal). Rank is out of selected universe.")
         display_df = portfolio_df[portfolio_df["Weight"] > 0.0005].copy()
         display_df["Weight"] = display_df["Weight"].apply(lambda x: f"{x:.2%}")
         display_df["Signal (z-score)"] = display_df["Signal (z-score)"].apply(lambda x: f"{x:+.3f}")
         display_df["Rank"] = display_df["Rank"].apply(lambda x: f"{int(x)} / {n_assets}")
         display_df = display_df.drop(columns=["_raw_pred"])
         if has_actual:
-            actual_map = dict(zip(selected_tickers, actual_5d_returns))
-            display_df["Actual 5D Return"] = display_df["Ticker"].map(actual_map).apply(lambda x: f"{x*100:+.3f}%" if pd.notna(x) else "")
+            display_df["Actual 5D Return"] = display_df["Ticker"].map(actual_map_full).apply(
+                lambda x: f"{x*100:+.3f}%" if pd.notna(x) else ""
+            )
         st.dataframe(display_df, use_container_width=True, hide_index=True, key="opt_holdings_table")
 
     # ─────────────────────────────────────────────────────────────────
