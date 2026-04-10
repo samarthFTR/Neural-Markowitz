@@ -76,6 +76,23 @@ def load_prices():
     return pd.read_csv(RAW_PRICES_PATH, index_col=0, parse_dates=True)
 
 
+@st.cache_data(ttl=3600)  # cache 1 hour so repeated interactions don't re-download
+def fetch_live_prices(tickers: tuple, lookback_days: int = 120):
+    """
+    Fetch recent Close prices from Yahoo Finance for live predictions.
+    Returns a DataFrame with the same wide format as raw.csv.
+    """
+    import yfinance as yf
+    raw = yf.download(
+        list(tickers), period=f"{lookback_days}d",
+        auto_adjust=True, progress=False, threads=True,
+    )["Close"]
+    # yfinance may return fewer columns if a ticker has no data
+    raw = raw.dropna(axis=1, how="all")
+    raw.index = pd.to_datetime(raw.index)
+    return raw
+
+
 @st.cache_data
 def compute_features(prices):
     """Compute the 10 alpha features from raw close prices."""
@@ -334,6 +351,16 @@ def main():
                     '<p style="color:#8B949E;font-size:12px;margin:4px 0 0 0">Portfolio Construction Platform</p></div>', unsafe_allow_html=True)
         st.markdown("---")
 
+        # ── Prediction Mode ──
+        st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Prediction Mode</p>', unsafe_allow_html=True)
+        live_mode = st.toggle(
+            "Live Prediction (fetch today's prices)",
+            value=False, key="live_mode",
+            help="Fetches real-time prices from Yahoo Finance and optimizes for today. "
+                 "Actual 5D return will be unavailable — this is a genuine forward-looking prediction."
+        )
+
+        st.markdown("---")
         st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Model</p>', unsafe_allow_html=True)
         available_models = []
         for m in ["spo+", "mse", "hybrid"]:
@@ -365,60 +392,138 @@ def main():
             st.stop()
 
         st.markdown("---")
-        st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Optimization Date</p>', unsafe_allow_html=True)
-
-        available_dates = prices.index[60:]  # need 60 days for covariance
-        date_options = [d.strftime("%Y-%m-%d") for d in available_dates[-252:]]
-        # Default to 10 bars before end so actual 5D forward return is always available
-        default_idx = max(0, len(date_options) - 10)
-        opt_date_str = st.selectbox("Date", date_options, index=default_idx, key="opt_date")
-        opt_date = pd.Timestamp(opt_date_str)
+        if not live_mode:
+            st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Optimization Date</p>', unsafe_allow_html=True)
+            available_dates = prices.index[60:]
+            date_options = [d.strftime("%Y-%m-%d") for d in available_dates[-252:]]
+            default_idx = max(0, len(date_options) - 10)
+            opt_date_str = st.selectbox("Date", date_options, index=default_idx, key="opt_date")
+            opt_date = pd.Timestamp(opt_date_str)
+        else:
+            opt_date_str = pd.Timestamp.today().strftime("%Y-%m-%d")
+            opt_date = None  # signals live mode downstream
 
         st.markdown("---")
         st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Backtest</p>', unsafe_allow_html=True)
-        run_backtest = st.checkbox("Run walk-forward backtest", value=False, key="run_bt")
-        if run_backtest:
+        run_backtest = st.checkbox("Run walk-forward backtest", value=False, key="run_bt",
+                                   disabled=live_mode, help="Backtest uses historical data only.")
+        if run_backtest and not live_mode:
             bt_days = st.slider("Backtest window (trading days)", 20, 252, 60, key="bt_days")
 
     # ── Header ──
-    st.markdown('<div class="hdr"><h1>Portfolio Optimization</h1><p>Predict expected returns and solve for optimal portfolio weights via differentiable Markowitz optimization</p></div>', unsafe_allow_html=True)
+    if live_mode:
+        st.markdown(
+            '<div class="hdr"><h1>Portfolio Optimization — Live Prediction</h1>'
+            f'<p>Forward-looking optimization using today\'s market data &nbsp;|&nbsp; '
+            f'Fetched: <strong>{opt_date_str}</strong> &nbsp;|&nbsp; '
+            'Actual 5-day return will be available in 5 trading days</p></div>',
+            unsafe_allow_html=True
+        )
+        st.info(
+            "Live mode: prices fetched from Yahoo Finance right now. "
+            "The model ranks stocks by its learned signal and solves for the optimal Markowitz portfolio. "
+            "No realised return is shown because we are predicting the future."
+        )
+    else:
+        st.markdown('<div class="hdr"><h1>Portfolio Optimization</h1><p>Predict expected returns and solve for optimal portfolio weights via differentiable Markowitz optimization</p></div>', unsafe_allow_html=True)
 
     # ── Load model ──
-    # The model was trained on all 64 tickers, so we always
-    # predict for all 64, then slice to the user's selection.
     net = load_model(selected_model, n_features=10, n_assets=len(all_tickers))
     if net is None:
         st.error(f"Model file not found for mode '{selected_model}'. Run the SPO training pipeline first.")
         st.stop()
 
-    # ── Compute covariance for selected date ──
-    prices_subset = prices[selected_tickers]
-    cov_window = 60
-    loc = prices.index.get_loc(opt_date)
-    window_returns = prices_subset.pct_change().iloc[loc - cov_window:loc].dropna(how="any")
-
-    if len(window_returns) < 30:
-        st.error("Not enough return history for covariance estimation at this date.")
-        st.stop()
-
     from sklearn.covariance import LedoitWolf
-    lw = LedoitWolf().fit(window_returns.values)
-    cov_matrix = lw.covariance_
-    eigvals, eigvecs = np.linalg.eigh(cov_matrix)
-    eigvals = np.maximum(eigvals, 1e-8)
-    cov_matrix = eigvecs @ np.diag(eigvals) @ eigvecs.T
-    cov_matrix = ((cov_matrix + cov_matrix.T) / 2).astype(np.float32)
 
-    # ── Build features & predict for ALL tickers (model expects 64) ──
-    full_feat = build_feature_matrix(features_dict, all_tickers, opt_date)
-    full_feat_tensor = torch.tensor(full_feat, dtype=torch.float32).unsqueeze(0)
-    with torch.no_grad():
-        full_preds = net(full_feat_tensor).squeeze(0).numpy()
+    # ══════════════════════════════════════════════════════════════════
+    #  LIVE MODE  — fetch current prices & compute features on the fly
+    # ══════════════════════════════════════════════════════════════════
+    if live_mode:
+        with st.spinner("Fetching live prices from Yahoo Finance..."):
+            live_prices = fetch_live_prices(tuple(all_tickers), lookback_days=120)
 
-    # Map predictions to selected tickers
-    ticker_to_idx = {t: i for i, t in enumerate(all_tickers)}
-    sel_indices = [ticker_to_idx[t] for t in selected_tickers]
-    predicted_returns = full_preds[sel_indices]
+        # Keep only tickers that came back successfully
+        live_tickers_ok = [t for t in all_tickers if t in live_prices.columns]
+        missing = set(all_tickers) - set(live_tickers_ok)
+        if missing:
+            st.warning(f"Could not fetch data for: {', '.join(sorted(missing))}. These tickers will be excluded.")
+
+        live_features = compute_features(live_prices)
+        live_date = live_prices.index[-1]          # most recent trading day
+        opt_date_str = live_date.strftime("%Y-%m-%d")
+
+        # Build feature matrix for all (available) tickers on live_date
+        full_feat = build_feature_matrix(live_features, live_tickers_ok, live_date)
+
+        # Covariance from last 60 live trading days
+        prices_subset_live = live_prices[[t for t in selected_tickers if t in live_prices.columns]]
+        selected_tickers_live = list(prices_subset_live.columns)
+        window_returns = prices_subset_live.pct_change().iloc[-60:].dropna(how="any")
+
+        if len(window_returns) < 20:
+            st.error("Not enough live return history for covariance estimation.")
+            st.stop()
+
+        lw = LedoitWolf().fit(window_returns.values)
+        cov_matrix = lw.covariance_
+        eigvals, eigvecs = np.linalg.eigh(cov_matrix)
+        eigvals = np.maximum(eigvals, 1e-8)
+        cov_matrix = eigvecs @ np.diag(eigvals) @ eigvecs.T
+        cov_matrix = ((cov_matrix + cov_matrix.T) / 2).astype(np.float32)
+
+        # Predict for all live tickers, slice to selected
+        live_ticker_to_idx = {t: i for i, t in enumerate(live_tickers_ok)}
+        full_feat_tensor = torch.tensor(full_feat, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():
+            # Model expects exactly 64 tickers; pad/slice as needed
+            n_live = len(live_tickers_ok)
+            n_model = len(all_tickers)
+            if n_live < n_model:
+                pad = np.zeros((1, n_model - n_live, full_feat.shape[1]), dtype=np.float32)
+                feat_padded = np.concatenate([full_feat[np.newaxis], pad], axis=1)
+                full_preds = net(torch.tensor(feat_padded)).squeeze(0).numpy()[:n_live]
+            else:
+                full_preds = net(full_feat_tensor).squeeze(0).numpy()
+
+        sel_live_indices = [live_ticker_to_idx[t] for t in selected_tickers_live]
+        predicted_returns = full_preds[sel_live_indices]
+        selected_tickers = selected_tickers_live   # use only what was fetched
+        n_assets = len(selected_tickers)
+        has_actual = False
+        actual_5d_returns = None
+        actual_port_return = None
+
+    # ══════════════════════════════════════════════════════════════════
+    #  HISTORICAL MODE  — use dataset prices
+    # ══════════════════════════════════════════════════════════════════
+    else:
+        prices_subset = prices[selected_tickers]
+        cov_window = 60
+        loc = prices.index.get_loc(opt_date)
+        window_returns = prices_subset.pct_change().iloc[loc - cov_window:loc].dropna(how="any")
+
+        if len(window_returns) < 30:
+            st.error("Not enough return history for covariance estimation at this date.")
+            st.stop()
+
+        lw = LedoitWolf().fit(window_returns.values)
+        cov_matrix = lw.covariance_
+        eigvals, eigvecs = np.linalg.eigh(cov_matrix)
+        eigvals = np.maximum(eigvals, 1e-8)
+        cov_matrix = eigvecs @ np.diag(eigvals) @ eigvecs.T
+        cov_matrix = ((cov_matrix + cov_matrix.T) / 2).astype(np.float32)
+
+        full_feat = build_feature_matrix(features_dict, all_tickers, opt_date)
+        full_feat_tensor = torch.tensor(full_feat, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():
+            full_preds = net(full_feat_tensor).squeeze(0).numpy()
+
+    # Map predictions to selected tickers (historical mode only;
+    # live mode already set predicted_returns inside its branch)
+    if not live_mode:
+        ticker_to_idx = {t: i for i, t in enumerate(all_tickers)}
+        sel_indices = [ticker_to_idx[t] for t in selected_tickers]
+        predicted_returns = full_preds[sel_indices]
 
     # ── Cross-sectional z-score & rank of predictions ──
     # NOTE: SPO+ model outputs near-constant absolute values (~-19%) because
@@ -463,15 +568,18 @@ def main():
     top5_concentration = float(np.sort(weights)[-min(5, n_assets):].sum())
     top_signal_ticker = portfolio_df.iloc[0]["Ticker"] if len(portfolio_df) > 0 else ""
 
-    # ── Actual (forward) return if available ──
-    if loc + 5 < len(prices):
-        actual_5d_returns = (prices_subset.iloc[loc + 5] / prices_subset.iloc[loc] - 1).values.astype(np.float32)
-        actual_port_return = float(np.dot(weights, actual_5d_returns))
-        has_actual = True
-    else:
-        actual_5d_returns = None
-        actual_port_return = None
-        has_actual = False
+    # \u2500\u2500 Actual (forward) return \u2500\u2500
+    # Live mode: already set has_actual=False in the live branch above.
+    # Historical mode: check if +5 days exists in the dataset.
+    if not live_mode:
+        if loc + 5 < len(prices):
+            actual_5d_returns = (prices_subset.iloc[loc + 5] / prices_subset.iloc[loc] - 1).values.astype(np.float32)
+            actual_port_return = float(np.dot(weights, actual_5d_returns))
+            has_actual = True
+        else:
+            actual_5d_returns = None
+            actual_port_return = None
+            has_actual = False
 
     # =====================================================================
     #  TAB LAYOUT
