@@ -254,6 +254,34 @@ python src/spo/trainer.py \
 | `--max-weight` | `0.10` | Maximum allocation per asset (concentration limit) |
 | `--hidden` | `64 32` | Hidden layer dimensions for the prediction network |
 
+### 3. Portfolio Optimization Dashboard
+
+> **Prerequisite:** SPO models must be trained first (step 2 above).
+
+```bash
+# 4. Create the environment file (one-time setup — .env is gitignored)
+echo PYTHONPATH=src > .env
+
+# 5. Launch the interactive dashboard
+python -m streamlit run app/dashboard.py
+```
+
+The dashboard runs at **http://localhost:8501** and provides:
+
+| Feature | Description |
+|---------|-------------|
+| **Historical mode** | Backtest any date in the last year of data |
+| **Live Prediction mode** | Fetches today's prices from Yahoo Finance and optimises for the *next* 5 trading days |
+| **Optimize tab** | Portfolio weights, sector allocation, realised returns, holdings table |
+| **Analysis tab** | Signal z-score scatter, risk contribution, correlation heatmap, efficient frontier |
+| **Backtest tab** | Walk-forward equity curve, drawdown, rolling IC, decision regret |
+
+> **Note for collaborators:** `.env` is gitignored for security. After cloning, create it manually:
+> ```bash
+> echo PYTHONPATH=src > .env
+> ```
+> This ensures `spo.*` and `utils.*` modules resolve correctly from any terminal inside the project.
+
 ---
 
 ## How It Works
