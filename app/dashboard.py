@@ -407,6 +407,7 @@ def main():
         st.markdown('<p style="color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Backtest</p>', unsafe_allow_html=True)
         run_backtest = st.checkbox("Run walk-forward backtest", value=False, key="run_bt",
                                    disabled=live_mode, help="Backtest uses historical data only.")
+        bt_days = 60  # default; overridden by slider when backtest is enabled
         if run_backtest and not live_mode:
             bt_days = st.slider("Backtest window (trading days)", 20, 252, 60, key="bt_days")
 
