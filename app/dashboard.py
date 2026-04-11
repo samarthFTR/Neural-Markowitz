@@ -230,13 +230,40 @@ div[data-baseweb="select"] li:hover { background: #21262D !important; }
 
 /* ── Header ── */
 #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-header[data-testid="stHeader"] { display: none !important; }
-[data-testid="stToolbar"] { display: none !important; }
-[data-testid="stStatusWidget"] { display: none !important; }
-.stDeployButton { display: none !important; }
-[data-testid="manage-app-button"] { display: none !important; }
-[data-testid="stSidebarCollapseButton"] { display: none !important; }
-[data-testid="collapsedControl"] { display: none !important; }
+header[data-testid="stHeader"] { background: #0E1117; border-bottom: 1px solid #21262D; }
+
+/* Style header & sidebar buttons so icons are visible on dark bg */
+header[data-testid="stHeader"] button,
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="collapsedControl"] button {
+    background: #161B22 !important;
+    border: 1px solid #2D3139 !important;
+    border-radius: 6px !important;
+    color: #C9D1D9 !important;
+    transition: all 0.15s ease;
+}
+header[data-testid="stHeader"] button:hover,
+[data-testid="stSidebarCollapseButton"] button:hover,
+[data-testid="collapsedControl"] button:hover {
+    background: #21262D !important;
+    border-color: #6C8EBF !important;
+    color: #E6EDF3 !important;
+}
+/* Ensure SVG icons inside header buttons are visible */
+header[data-testid="stHeader"] button svg,
+[data-testid="stSidebarCollapseButton"] svg,
+[data-testid="collapsedControl"] svg {
+    fill: #8B949E !important;
+    stroke: #8B949E !important;
+    color: #8B949E !important;
+}
+header[data-testid="stHeader"] button:hover svg,
+[data-testid="stSidebarCollapseButton"] button:hover svg,
+[data-testid="collapsedControl"] button:hover svg {
+    fill: #E6EDF3 !important;
+    stroke: #E6EDF3 !important;
+    color: #E6EDF3 !important;
+}
 
 /* ── Page title block ── */
 .hdr { padding: 20px 0 10px 0; border-bottom: 1px solid #21262D; margin-bottom: 28px; }
