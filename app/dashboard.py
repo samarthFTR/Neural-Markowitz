@@ -230,7 +230,13 @@ div[data-baseweb="select"] li:hover { background: #21262D !important; }
 
 /* ── Header ── */
 #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-header[data-testid="stHeader"] { background: #0E1117; border-bottom: 1px solid #21262D; }
+header[data-testid="stHeader"] { display: none !important; }
+[data-testid="stToolbar"] { display: none !important; }
+[data-testid="stStatusWidget"] { display: none !important; }
+.stDeployButton { display: none !important; }
+[data-testid="manage-app-button"] { display: none !important; }
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
 
 /* ── Page title block ── */
 .hdr { padding: 20px 0 10px 0; border-bottom: 1px solid #21262D; margin-bottom: 28px; }
