@@ -2,3 +2,4 @@ logs
 debug.py
 debug*.*
 results_output.txt
+.env

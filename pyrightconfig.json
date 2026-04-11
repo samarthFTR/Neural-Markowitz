@@ -1,0 +1,8 @@
+{
+  "include": ["src", "app", "notebooks"],
+  "extraPaths": ["src"],
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}
