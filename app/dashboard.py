@@ -947,44 +947,128 @@ def main():
 
         st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
-        # Cumulative returns comparison
-        cum_port = np.cumprod(1 + bt_returns) - 1
-        cum_eq = np.cumprod(1 + bt_eq) - 1
-        cum_oracle = np.cumprod(1 + bt_oracle) - 1
+        # Normalised equity curves (base = 100) so all three lines are visible
+        eq_curve_port   = 100 * np.cumprod(1 + bt_returns)
+        eq_curve_ew     = 100 * np.cumprod(1 + bt_eq)
+        eq_curve_oracle = 100 * np.cumprod(1 + bt_oracle)
 
         fig_bt = go.Figure()
-        fig_bt.add_trace(go.Scatter(x=bt_date_labels, y=cum_port, name="SPO Portfolio",
-                                     line=dict(color=C["gold"], width=2.5)))
-        fig_bt.add_trace(go.Scatter(x=bt_date_labels, y=cum_eq, name="Equal Weight",
-                                     line=dict(color=C["muted"], width=1.5, dash="dot")))
-        fig_bt.add_trace(go.Scatter(x=bt_date_labels, y=cum_oracle, name="Oracle",
-                                     line=dict(color=C["purple"], width=1.5, dash="dash")))
-        fig_bt.update_yaxes(tickformat=".0%")
-        _dark_layout(fig_bt, "Cumulative Returns", height=400)
+        fig_bt.add_trace(go.Scatter(
+            x=bt_date_labels, y=eq_curve_port, name="SPO Portfolio",
+            line=dict(color=C["gold"], width=2.5),
+            hovertemplate="%{x}<br>Index: %{y:.2f}<extra>SPO</extra>",
+        ))
+        fig_bt.add_trace(go.Scatter(
+            x=bt_date_labels, y=eq_curve_ew, name="Equal Weight",
+            line=dict(color=C["muted"], width=1.5, dash="dot"),
+            hovertemplate="%{x}<br>Index: %{y:.2f}<extra>EW</extra>",
+        ))
+        fig_bt.add_hline(y=100, line_dash="dot", line_color="rgba(255,255,255,0.15)")
+        # Shade area between SPO and EW
+        fig_bt.add_trace(go.Scatter(
+            x=bt_date_labels, y=eq_curve_port,
+            fill=None, mode="lines", line_color="rgba(0,0,0,0)", showlegend=False,
+        ))
+        fig_bt.add_trace(go.Scatter(
+            x=bt_date_labels, y=eq_curve_ew, mode="lines",
+            fill="tonexty",
+            fillcolor="rgba(212,160,60,0.08)",
+            line_color="rgba(0,0,0,0)", showlegend=False,
+        ))
+        fig_bt.update_yaxes(title_text="Portfolio Value (base = 100)")
+        _dark_layout(fig_bt, "Equity Curve — SPO vs Equal Weight (base 100)", height=400)
         st.plotly_chart(fig_bt, use_container_width=True, key="bt_cum")
 
-        # Drawdown
+        # Period-by-period return bar: SPO vs EW
         c1, c2 = st.columns(2)
         with c1:
-            dd = (np.maximum.accumulate(np.cumprod(1 + bt_returns)) - np.cumprod(1 + bt_returns)) / np.maximum.accumulate(np.cumprod(1 + bt_returns))
-            fig_dd = go.Figure()
-            fig_dd.add_trace(go.Scatter(x=bt_date_labels, y=-dd, mode="lines",
-                                         fill="tozeroy", line=dict(color=C["red"], width=1.5),
-                                         fillcolor="rgba(224,108,108,0.15)", name="Drawdown"))
-            fig_dd.update_yaxes(tickformat=".1%")
-            _dark_layout(fig_dd, "Drawdown", height=300)
-            st.plotly_chart(fig_dd, use_container_width=True, key="bt_dd")
+            bar_colors_spo = [C["green"] if r >= 0 else C["red"] for r in bt_returns]
+            fig_bar = go.Figure()
+            fig_bar.add_trace(go.Bar(
+                x=bt_date_labels, y=bt_returns * 100,
+                marker_color=bar_colors_spo, name="SPO 5D Return",
+                hovertemplate="%{x}<br>%{y:+.2f}%<extra>SPO</extra>",
+            ))
+            fig_bar.add_trace(go.Scatter(
+                x=bt_date_labels, y=np.array(bt_eq) * 100,
+                mode="lines", name="EW Return",
+                line=dict(color=C["muted"], width=1, dash="dot"),
+                hovertemplate="%{x}<br>%{y:+.2f}%<extra>EW</extra>",
+            ))
+            fig_bar.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.2)")
+            fig_bar.update_yaxes(tickformat="+.1f", title_text="5-Day Return (%)")
+            _dark_layout(fig_bar, "Period Returns — SPO vs Equal Weight", height=320)
+            st.plotly_chart(fig_bar, use_container_width=True, key="bt_period_bar")
 
         with c2:
-            # Rolling IC
-            ic_smooth = pd.Series(bt_ic_list).rolling(10, min_periods=3).mean().values
-            fig_ic = go.Figure()
-            fig_ic.add_trace(go.Scatter(x=bt_date_labels, y=ic_smooth, mode="lines",
-                                         line=dict(color=C["teal"], width=1.5), name="IC (10-day MA)"))
-            fig_ic.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.2)")
-            fig_ic.update_yaxes(title_text="Spearman IC")
-            _dark_layout(fig_ic, "Rolling Information Coefficient", height=300)
-            st.plotly_chart(fig_ic, use_container_width=True, key="bt_ic")
+            # Drawdown from equity curve high
+            dd = (np.maximum.accumulate(eq_curve_port) - eq_curve_port) / np.maximum.accumulate(eq_curve_port)
+            fig_dd = go.Figure()
+            fig_dd.add_trace(go.Scatter(
+                x=bt_date_labels, y=-dd * 100, mode="lines",
+                fill="tozeroy", line=dict(color=C["red"], width=1.5),
+                fillcolor="rgba(224,108,108,0.15)", name="Drawdown",
+                hovertemplate="%{x}<br>%{y:.2f}%<extra></extra>",
+            ))
+            fig_dd.update_yaxes(tickformat=".1f", title_text="Drawdown (%)")
+            _dark_layout(fig_dd, "Underwater Equity (Drawdown)", height=320)
+            st.plotly_chart(fig_dd, use_container_width=True, key="bt_dd")
+
+        # Rolling IC
+        ic_smooth = pd.Series(bt_ic_list).rolling(10, min_periods=3).mean().values
+        fig_ic = go.Figure()
+        fig_ic.add_trace(go.Scatter(
+            x=bt_date_labels, y=ic_smooth, mode="lines",
+            line=dict(color=C["teal"], width=2), name="IC (10-day MA)",
+            hovertemplate="%{x}<br>IC: %{y:.4f}<extra></extra>",
+        ))
+        fig_ic.add_trace(go.Bar(
+            x=bt_date_labels, y=bt_ic_list,
+            marker_color=[C["teal"] if v >= 0 else C["red"] for v in bt_ic_list],
+            opacity=0.25, name="Raw IC",
+        ))
+        fig_ic.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.2)")
+        fig_ic.update_yaxes(title_text="Spearman Rank IC", range=[-0.6, 0.6])
+        _dark_layout(fig_ic, "Rolling Information Coefficient (IC)", height=320)
+        st.plotly_chart(fig_ic, use_container_width=True, key="bt_ic")
+
+        # Oracle in its own section — separate Y-axis so it doesn't destroy the main chart
+        with st.expander("Oracle Benchmark (Perfect Foresight)", expanded=False):
+            st.caption(
+                "Oracle uses actual 5-day returns as predictions — it has perfect foresight. "
+                "Shown separately because its compounded return dwarfs any realistic strategy. "
+                "Regret = Oracle − SPO per period."
+            )
+            c3, c4 = st.columns(2)
+            with c3:
+                fig_oracle = go.Figure()
+                fig_oracle.add_trace(go.Scatter(
+                    x=bt_date_labels, y=eq_curve_oracle, name="Oracle",
+                    line=dict(color=C["purple"], width=2),
+                    hovertemplate="%{x}<br>Index: %{y:.1f}<extra>Oracle</extra>",
+                ))
+                fig_oracle.add_hline(y=100, line_dash="dot", line_color="rgba(255,255,255,0.15)")
+                fig_oracle.update_yaxes(title_text="Portfolio Value (base 100)")
+                _dark_layout(fig_oracle, "Oracle Equity Curve", height=280)
+                st.plotly_chart(fig_oracle, use_container_width=True, key="bt_oracle_curve")
+            with c4:
+                regret_per_period = (np.array(bt_oracle) - bt_returns) * 100
+                fig_regret = go.Figure(go.Bar(
+                    x=bt_date_labels, y=regret_per_period,
+                    marker_color=[C["red"] if v > 0 else C["green"] for v in regret_per_period],
+                    hovertemplate="%{x}<br>Regret: %{y:+.2f}%<extra></extra>",
+                ))
+                fig_regret.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.2)")
+                fig_regret.update_yaxes(title_text="Regret per period (%)")
+                _dark_layout(fig_regret, "Decision Regret per Period", height=280)
+                st.plotly_chart(fig_regret, use_container_width=True, key="bt_regret")
+
+        # Regret note
+        st.caption(
+            f"Mean per-period regret (Oracle − SPO): {bt_regret*100:+.4f}% &nbsp;|&nbsp; "
+            f"This measures how much return is left on the table per period vs perfect foresight. "
+            f"Lower regret = model decisions are closer to optimal."
+        )
 
 
 if __name__ == "__main__":
