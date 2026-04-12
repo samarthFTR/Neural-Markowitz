@@ -171,8 +171,8 @@ def _dark_layout(fig, title=None, height=400):
         font=dict(family="Inter, system-ui, sans-serif", size=12, color=C["text"]),
         title=dict(text=title, font=dict(size=15, color=C["text"]), x=0) if title else None,
         height=height,
-        margin=dict(l=50, r=20, t=40 if title else 10, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+        margin=dict(l=50, r=20, t=50 if title else 20, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                     bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
         xaxis=dict(gridcolor="rgba(255,255,255,0.05)", zeroline=False),
         yaxis=dict(gridcolor="rgba(255,255,255,0.05)", zeroline=False),
@@ -187,10 +187,19 @@ def _dark_layout(fig, title=None, height=400):
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined');
 
 /* ── Base ── */
 html, body, [class*="st-"] { font-family: 'Inter', system-ui, sans-serif !important; }
 .stApp { background: #0E1117; }
+
+/* Fix Material icon buttons rendering as raw text */
+[data-testid="stSidebarCollapseButton"] button span,
+[data-testid="collapsedControl"] button span {
+    font-family: 'Material Symbols Outlined' !important;
+    font-size: 20px !important;
+    -webkit-font-smoothing: antialiased;
+}
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
@@ -869,6 +878,10 @@ def main():
     #  TAB 3: BACKTEST — walk-forward simulation
     # ─────────────────────────────────────────────────────────────────
     with tabs[2]:
+
+        if live_mode:
+            st.info("Backtesting is not available in Live Prediction mode. Disable 'Live Prediction' to run historical simulations.")
+            st.stop()
 
         if not run_backtest:
             st.info("Enable 'Run walk-forward backtest' in the sidebar to see historical performance.")
