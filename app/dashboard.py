@@ -818,60 +818,53 @@ def main():
             fig_corr.update_xaxes(dtick=1)
             st.plotly_chart(fig_corr, use_container_width=True, key="ana_corr")
 
-        # Efficient frontier sketch
-        st.markdown("#### Efficient Frontier (Monte Carlo Simulation)")
-        st.caption("Expected returns estimated from 60-day historical mean returns. Risk from Ledoit-Wolf covariance. Colour = Sharpe ratio.")
+        # Efficient frontier sketch & Optimization Analytics
+        st.markdown("#### Efficient Frontier & Portfolio Optimization")
+        st.caption("Overlay of Max Sharpe, Min Volatility, and the SPO Forward-Looking predictions over the long-only feasible set.")
 
-        # Use historical mean returns (annualised) from the covariance window
-        hist_mean_rets = window_returns.mean().values.astype(np.float32)  # daily mean per asset
-        hist_mean_rets_ann = hist_mean_rets * 252                          # annualise
+        from spo.efficient_frontier import (
+            annualize_returns_and_cov, 
+            simulate_portfolios, 
+            optimize_portfolio, 
+            compute_efficient_frontier, 
+            plot_results,
+            compute_portfolio_performance
+        )
+        
+        # 1. Properly annualize historical expected returns and DAILY covariance
+        hist_mean_rets = window_returns.mean().values.astype(np.float32)
+        ann_rets, ann_cov = annualize_returns_and_cov(hist_mean_rets, cov_matrix, trading_days=252)
+        
+        with st.spinner("Generating Monte Carlo Portfolios & Efficient Frontier..."):
+            # 2. Simulate random portfolios
+            _, sim_rets, sim_vols, sim_sharpes = simulate_portfolios(ann_rets, ann_cov, num_portfolios=5000)
 
-        n_sim = 3000
-        np.random.seed(42)
-        rand_w = np.random.dirichlet(np.ones(n_assets), n_sim)
-        for i in range(n_sim):
-            rand_w[i] = np.minimum(rand_w[i], max_weight)
-            rand_w[i] /= rand_w[i].sum()
+            # 3. Optimize for Max Sharpe and Min Volatility
+            _, opt_ret, opt_vol, _ = optimize_portfolio(ann_rets, ann_cov, target="sharpe")
+            _, min_vol_ret, min_vol_vol, _ = optimize_portfolio(ann_rets, ann_cov, target="volatility")
 
-        sim_rets = rand_w @ hist_mean_rets_ann
-        cov_ann = cov_matrix * 252 / 5  # annualise from 5-day holding
-        sim_vols = np.array([np.sqrt(rand_w[i] @ cov_ann @ rand_w[i]) for i in range(n_sim)])
-        sim_sharpes = np.where(sim_vols > 0, sim_rets / sim_vols, 0)
+            # 4. Compute Equal Weight benchmark
+            eq_w = np.full(n_assets, 1.0 / n_assets)
+            eq_ret, eq_vol, _ = compute_portfolio_performance(eq_w, ann_rets, ann_cov)
+            
+            # 5. Evaluate the SPO optimal weights (predicted via neural net) on the SAME historical scale for visual comparison
+            # (Note: `weights` is the tensor output representing the SPO strategy)
+            spo_ret, spo_vol, _ = compute_portfolio_performance(weights, ann_rets, ann_cov)
 
-        opt_ret_ann = float(weights @ hist_mean_rets_ann)
-        opt_vol_ann = float(np.sqrt(weights @ cov_ann @ weights))
+            # 6. Compute Efficient Frontier curve
+            ef_vols, ef_rets = compute_efficient_frontier(ann_rets, ann_cov, num_points=25)
 
-        fig_ef = go.Figure()
-        fig_ef.add_trace(go.Scatter(
-            x=sim_vols * 100, y=sim_rets * 100, mode="markers",
-            marker=dict(size=3, color=sim_sharpes, colorscale="Viridis",
-                        colorbar=dict(title="Sharpe"), opacity=0.5),
-            name="Random Portfolios",
-            hovertemplate="Vol: %{x:.2f}%<br>Return: %{y:.2f}%<br><extra></extra>",
-        ))
-        fig_ef.add_trace(go.Scatter(
-            x=[opt_vol_ann * 100], y=[opt_ret_ann * 100],
-            mode="markers+text",
-            marker=dict(size=16, color=C["gold"], symbol="star",
-                        line=dict(width=2, color="#fff")),
-            text=["SPO Optimal"], textposition="top center",
-            textfont=dict(size=12, color=C["gold"]),
-            name="Optimal Portfolio",
-        ))
-        eq_w = np.full(n_assets, 1.0 / n_assets)
-        eq_ret_ann = float(eq_w @ hist_mean_rets_ann)
-        eq_vol_ann = float(np.sqrt(eq_w @ cov_ann @ eq_w))
-        fig_ef.add_trace(go.Scatter(
-            x=[eq_vol_ann * 100], y=[eq_ret_ann * 100], mode="markers+text",
-            marker=dict(size=12, color=C["muted"], symbol="diamond",
-                        line=dict(width=2, color="#fff")),
-            text=["Equal Wt"], textposition="bottom center",
-            textfont=dict(size=11, color=C["muted"]),
-            name="Equal Weight",
-        ))
-        fig_ef.update_xaxes(title_text="Annualised Volatility (%)")
-        fig_ef.update_yaxes(title_text="Annualised Return (%)")
-        _dark_layout(fig_ef, height=450)
+        # 7. Plot complete visual
+        fig_ef = plot_results(
+            sim_vols, sim_rets, sim_sharpes,
+            opt_vol, opt_ret,
+            min_vol_vol, min_vol_ret,
+            ef_vols, ef_rets,
+            spo_vol=spo_vol, spo_ret=spo_ret,
+            eq_vol=eq_vol, eq_ret=eq_ret
+        )
+        
+        _dark_layout(fig_ef, height=500)
         st.plotly_chart(fig_ef, use_container_width=True, key="ana_frontier")
 
     # ─────────────────────────────────────────────────────────────────
