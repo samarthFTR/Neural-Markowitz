@@ -165,13 +165,16 @@ def run_optimization(net, features_matrix, cov_matrix, gamma, max_weight, n_asse
 # =====================================================================
 
 def _dark_layout(fig, title=None, height=400):
+    # FIX #1: Plotly renders `None` title as "undefined" in some versions.
+    # Always pass a valid string (empty string if no title) to prevent this.
+    safe_title = title if isinstance(title, str) and title else ""
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, system-ui, sans-serif", size=12, color=C["text"]),
-        title=dict(text=title, font=dict(size=15, color=C["text"]), x=0) if title else None,
+        title=dict(text=safe_title, font=dict(size=15, color=C["text"]), x=0),
         height=height,
-        margin=dict(l=50, r=20, t=50 if title else 20, b=40),
+        margin=dict(l=50, r=20, t=50 if safe_title else 20, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                     bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
         xaxis=dict(gridcolor="rgba(255,255,255,0.05)", zeroline=False),
@@ -568,19 +571,26 @@ def main():
         sel_indices = [ticker_to_idx[t] for t in selected_tickers]
         predicted_returns = full_preds[sel_indices]
 
-    # ── Cross-sectional z-score & rank of predictions ──
-    # NOTE: SPO+ model outputs near-constant absolute values (~-19%) because
-    # only the cross-sectional ranking matters for portfolio weights, not the
-    # absolute magnitude. We display z-scores and ranks instead of raw values.
+    # ── FIX #3: Cross-sectional z-score normalisation of predictions ──
+    # SPO+ model outputs are rank-based and near-constant in absolute magnitude
+    # (~-19%). Only the cross-sectional RANKING matters for Markowitz, not the
+    # absolute value.  Feeding near-constant mu into the QP causes numerical
+    # instability (all assets look identical to the solver).
+    #
+    # Solution: normalise predictions cross-sectionally BEFORE optimisation.
+    # z = (pred - mean) / (std + eps)  preserves ranking, gives the QP a
+    # well-conditioned signal spread, and prevents division by zero.
     pred_mean = predicted_returns.mean()
-    pred_std  = predicted_returns.std() + 1e-9
+    pred_std  = predicted_returns.std() + 1e-9                        # eps guards div-by-zero
     pred_zscore = (predicted_returns - pred_mean) / pred_std          # cross-sectional z-score
     pred_rank   = pd.Series(predicted_returns).rank(ascending=True).values  # 1 = weakest signal
 
     # ── Optimize for the user's selected universe ──
+    # FIX #3 cont.: Feed the z-scored predictions (not raw) into the portfolio
+    # layer so the solver sees a stable, well-spread signal vector.
     n_assets = len(selected_tickers)
     port_layer = DifferentiableMarkowitz(n_assets=n_assets, gamma=gamma, max_weight=max_weight)
-    pred_tensor = torch.tensor(predicted_returns, dtype=torch.float32)
+    pred_tensor = torch.tensor(pred_zscore, dtype=torch.float32)      # <-- normalised signal
     cov_tensor = torch.tensor(cov_matrix, dtype=torch.float32)
 
     with torch.no_grad():
@@ -593,23 +603,39 @@ def main():
         "Weight": weights,
         "Signal (z-score)": pred_zscore,
         "Rank": pred_rank.astype(int),
-        "_raw_pred": predicted_returns,   # kept for optimizer, hidden from display
+        "_raw_pred": predicted_returns,   # kept for reference, hidden from display
     }).sort_values("Weight", ascending=False).reset_index(drop=True)
 
     # ── Portfolio-level stats ──
-    # Use historical mean/vol from the covariance window for a meaningful Sharpe estimate
-    hist_ret_col = window_returns  # shape (window, n_assets)
-    hist_port_ret = (hist_ret_col * weights).sum(axis=1)   # portfolio daily returns
-    ann_factor = np.sqrt(252 / 5)
-    hist_mean = float(hist_port_ret.mean())
-    hist_vol  = float(hist_port_ret.std())
-    port_sharpe_est = (hist_mean / hist_vol * np.sqrt(252)) if hist_vol > 0 else 0.0
+    # FIX #2: Ensure consistent scaling.  `window_returns` is computed from
+    # daily pct_change, so `hist_port_ret` is in DAILY units.  `cov_matrix`
+    # is also estimated from daily returns (Ledoit-Wolf on daily pct_change).
+    # All annualisation uses 252 trading days per year.
+    hist_ret_col = window_returns  # shape (window, n_assets) — DAILY returns
+    hist_port_ret = (hist_ret_col * weights).sum(axis=1)   # portfolio DAILY returns
 
-    port_variance = float(weights @ cov_matrix @ weights)
-    port_vol = float(np.sqrt(port_variance))   # 5-day std dev from Ledoit-Wolf
+    hist_mean_daily = float(hist_port_ret.mean())           # mean daily return
+    hist_vol_daily  = float(hist_port_ret.std())            # daily volatility
+
+    # Annualise: ret * 252, vol * sqrt(252)
+    hist_mean_annual = hist_mean_daily * 252
+    hist_vol_annual  = hist_vol_daily * np.sqrt(252)
+    port_sharpe_est = (hist_mean_annual / hist_vol_annual) if hist_vol_annual > 0 else 0.0
+
+    # Portfolio volatility from covariance matrix (DAILY scale from Ledoit-Wolf)
+    port_variance_daily = float(weights @ cov_matrix @ weights)
+    port_vol_daily = float(np.sqrt(port_variance_daily))
+    port_vol_annual = port_vol_daily * np.sqrt(252)         # annualised volatility
+
     active_positions = int((weights > 0.001).sum())
     top5_concentration = float(np.sort(weights)[-min(5, n_assets):].sum())
     top_signal_ticker = portfolio_df.iloc[0]["Ticker"] if len(portfolio_df) > 0 else ""
+
+    # FIX #5 (BONUS): Sanity checks for unrealistic values
+    if hist_mean_annual > 0.50:
+        st.warning(f"⚠️ Estimated annual return ({hist_mean_annual*100:.1f}%) exceeds 50% — verify input data scaling.")
+    if hist_vol_annual > 0 and hist_vol_annual < 0.01:
+        st.warning(f"⚠️ Estimated annual volatility ({hist_vol_annual*100:.2f}%) is below 1% — unusually low.")
 
     # \u2500\u2500 Actual (forward) return \u2500\u2500
     # Live mode: already set has_actual=False in the live branch above.
@@ -637,11 +663,12 @@ def main():
 
         # KPI row
         cols = st.columns(6)
+        # FIX #2: KPIs now display ANNUALISED volatility for consistency.
         kpi_data = [
             ("Realised 5D Return",
              f"{actual_port_return*100:+.3f}%" if has_actual else "N/A",
              "Actual portfolio return" if has_actual else "Future date — not yet available"),
-            ("Portfolio Risk", f"{port_vol*100:.3f}%", "5-day std dev (Ledoit-Wolf)"),
+            ("Annual Volatility", f"{port_vol_annual*100:.2f}%", "Annualised daily vol (√252)"),
             ("Est. Sharpe", f"{port_sharpe_est:.2f}", "Historical 60d annualised"),
             ("Active Positions", f"{active_positions}", f"of {n_assets} assets selected"),
             ("Top-5 Weight", f"{top5_concentration:.1%}", "Concentration"),
@@ -831,7 +858,11 @@ def main():
             compute_portfolio_performance
         )
         
-        # 1. Properly annualize historical expected returns and DAILY covariance
+        # FIX #2 (frontier): Scale pipeline is DAILY → ANNUAL.
+        # `window_returns` are daily pct_change returns.  `cov_matrix` is
+        # Ledoit-Wolf fitted on those daily returns (daily scale).
+        # Annualise both:  ret_annual = ret_daily * 252,
+        #                  cov_annual = cov_daily * 252
         hist_mean_rets = window_returns.mean().values.astype(np.float32)
         ann_rets, ann_cov = annualize_returns_and_cov(hist_mean_rets, cov_matrix, trading_days=252)
         
@@ -864,7 +895,7 @@ def main():
             eq_vol=eq_vol, eq_ret=eq_ret
         )
         
-        _dark_layout(fig_ef, height=500)
+        _dark_layout(fig_ef, "Efficient Frontier — Annualised Risk vs Return", height=500)
         st.plotly_chart(fig_ef, use_container_width=True, key="ana_frontier")
 
     # ─────────────────────────────────────────────────────────────────
@@ -920,10 +951,16 @@ def main():
                     pred_full = net(feat_t).squeeze(0).numpy()
                 pred_sel = pred_full[sel_indices]
 
-                # Optimize
+                # FIX #3 (backtest): Apply cross-sectional z-score normalisation
+                # before optimisation, same as in the main branch.
+                bt_pred_mean = pred_sel.mean()
+                bt_pred_std  = pred_sel.std() + 1e-9
+                pred_sel_z   = (pred_sel - bt_pred_mean) / bt_pred_std
+
+                # Optimize using normalised predictions
                 pl = DifferentiableMarkowitz(n_assets=n_assets, gamma=gamma, max_weight=max_weight)
                 with torch.no_grad():
-                    w_bt = pl(torch.tensor(pred_sel), torch.tensor(cov_bt)).numpy()
+                    w_bt = pl(torch.tensor(pred_sel_z), torch.tensor(cov_bt)).numpy()
 
                 # Actual returns
                 actual_bt = (prices_subset.iloc[d_loc + 5] / prices_subset.iloc[d_loc] - 1).values.astype(np.float32)
@@ -961,9 +998,16 @@ def main():
         bt_eq = np.array(bt_eq)
 
         # Backtest KPIs
+        # FIX #2 (backtest): Correct annualisation for 5-day returns.
+        # Each backtest period is a 5-day (weekly) return, so there are
+        # ~252/5 = 50.4 such periods per year.  Annualise accordingly:
+        #   vol_annual  = vol_5d * sqrt(252/5)
+        #   mean_annual = mean_5d * (252/5)
+        #   sharpe      = mean_annual / vol_annual = mean_5d / vol_5d * sqrt(252/5)
+        periods_per_year = 252.0 / 5.0  # ~50.4 five-day periods per year
         bt_cum = float(np.prod(1 + bt_returns) - 1)
-        bt_vol = float(bt_returns.std() * ann_factor)
-        bt_sharpe = float(bt_returns.mean() / bt_returns.std() * ann_factor) if bt_returns.std() > 0 else 0.0
+        bt_vol = float(bt_returns.std() * np.sqrt(periods_per_year))   # annualised vol
+        bt_sharpe = float(bt_returns.mean() / bt_returns.std() * np.sqrt(periods_per_year)) if bt_returns.std() > 0 else 0.0
         bt_max_dd = float(((np.maximum.accumulate(np.cumprod(1 + bt_returns)) - np.cumprod(1 + bt_returns)) / np.maximum.accumulate(np.cumprod(1 + bt_returns))).max())
         bt_eq_cum = float(np.prod(1 + bt_eq) - 1)
         bt_mean_ic = float(np.nanmean(bt_ic_list))
