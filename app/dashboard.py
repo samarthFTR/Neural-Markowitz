@@ -847,10 +847,10 @@ def main():
 
         # Efficient frontier sketch & Optimization Analytics
         st.markdown("#### Efficient Frontier & Portfolio Optimization")
-        st.caption("Overlay of Max Sharpe, Min Volatility, and the SPO Forward-Looking predictions over the long-only feasible set.")
 
         from spo.efficient_frontier import (
-            annualize_returns_and_cov, 
+            annualize_returns_and_cov,
+            shrink_mean_returns,
             simulate_portfolios, 
             optimize_portfolio, 
             compute_efficient_frontier, 
@@ -858,34 +858,50 @@ def main():
             compute_portfolio_performance
         )
         
-        # FIX #2 (frontier): Scale pipeline is DAILY → ANNUAL.
-        # `window_returns` are daily pct_change returns.  `cov_matrix` is
-        # Ledoit-Wolf fitted on those daily returns (daily scale).
-        # Annualise both:  ret_annual = ret_daily * 252,
-        #                  cov_annual = cov_daily * 252
+        # Scale pipeline: DAILY → ANNUAL.
+        # `window_returns` = daily pct_change, `cov_matrix` = Ledoit-Wolf on daily.
+        # Annualise:  ret_annual = ret_daily × 252,  cov_annual = cov_daily × 252.
         hist_mean_rets = window_returns.mean().values.astype(np.float32)
-        ann_rets, ann_cov = annualize_returns_and_cov(hist_mean_rets, cov_matrix, trading_days=252)
+        ann_rets_raw, ann_cov = annualize_returns_and_cov(hist_mean_rets, cov_matrix, trading_days=252)
+
+        # Shrink mean return estimates to reduce estimation noise.
+        # With T≈60 daily observations, individual stock annualised return
+        # estimates have standard errors of ~60% — they are noise-dominated.
+        # Shrinkage toward the cross-sectional mean is standard practice
+        # (Jorion 1986, Michaud 1989).
+        n_obs = len(window_returns)
+        ann_rets, shrink_intensity = shrink_mean_returns(ann_rets_raw, n_obs)
+
+        st.caption(
+            f"Mean return shrinkage: {shrink_intensity:.0%} toward grand mean "
+            f"(estimation window: {n_obs} days).  "
+            f"All portfolios constrained to max {max_weight:.0%} per asset."
+        )
         
         with st.spinner("Generating Monte Carlo Portfolios & Efficient Frontier..."):
-            # 2. Simulate random portfolios
-            _, sim_rets, sim_vols, sim_sharpes = simulate_portfolios(ann_rets, ann_cov, num_portfolios=5000)
+            # All frontier computations use the SAME max_weight constraint
+            # as the SPO portfolio for a fair visual comparison.
+            _, sim_rets, sim_vols, sim_sharpes = simulate_portfolios(
+                ann_rets, ann_cov, num_portfolios=5000, max_weight=max_weight)
 
-            # 3. Optimize for Max Sharpe and Min Volatility
-            _, opt_ret, opt_vol, _ = optimize_portfolio(ann_rets, ann_cov, target="sharpe")
-            _, min_vol_ret, min_vol_vol, _ = optimize_portfolio(ann_rets, ann_cov, target="volatility")
+            # Max Sharpe and Min Volatility under same constraints
+            _, opt_ret, opt_vol, _ = optimize_portfolio(
+                ann_rets, ann_cov, target="sharpe", max_weight=max_weight)
+            _, min_vol_ret, min_vol_vol, _ = optimize_portfolio(
+                ann_rets, ann_cov, target="volatility", max_weight=max_weight)
 
-            # 4. Compute Equal Weight benchmark
+            # Equal Weight benchmark (always feasible if max_weight ≥ 1/n)
             eq_w = np.full(n_assets, 1.0 / n_assets)
             eq_ret, eq_vol, _ = compute_portfolio_performance(eq_w, ann_rets, ann_cov)
             
-            # 5. Evaluate the SPO optimal weights (predicted via neural net) on the SAME historical scale for visual comparison
-            # (Note: `weights` is the tensor output representing the SPO strategy)
+            # SPO weights evaluated on the SAME shrunk/annualised inputs
             spo_ret, spo_vol, _ = compute_portfolio_performance(weights, ann_rets, ann_cov)
 
-            # 6. Compute Efficient Frontier curve
-            ef_vols, ef_rets = compute_efficient_frontier(ann_rets, ann_cov, num_points=25)
+            # Efficient Frontier curve (constrained)
+            ef_vols, ef_rets = compute_efficient_frontier(
+                ann_rets, ann_cov, num_points=25, max_weight=max_weight)
 
-        # 7. Plot complete visual
+        # Plot complete visual
         fig_ef = plot_results(
             sim_vols, sim_rets, sim_sharpes,
             opt_vol, opt_ret,
